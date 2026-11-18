@@ -553,7 +553,6 @@ main .wrap{padding-block:24px 64px;display:grid;gap:18px}
 .reg-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:var(--r)}
 .reg-card .meta{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
 .reg-card .acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-@media (max-width:640px){.reg-card{grid-template-columns:auto minmax(0,1fr)}.reg-card .acts{grid-column:1/-1;justify-content:stretch}.reg-card .acts button{flex:1}}
 .reg-done{display:grid;justify-items:center;gap:12px;text-align:center;padding-block:12px}
 .reg-done .qr{width:220px;height:220px;padding:14px;background:#fff;border-radius:var(--r);border:1px solid var(--line)}
 .reg-done .code{font:700 40px/1 var(--display);letter-spacing:.08em}
@@ -885,3 +884,31 @@ body[data-role="viewer"] :is([data-qa],#aImport,#aAdd,.p-checkin,#photoGo,#impGo
 body[data-role="staff"] #rForm,body[data-role="viewer"] #rForm,body[data-role="viewer"] #aPaste{display:none!important}
 /* long names and emails shorten with … instead of widening the attendees table */
 @media (min-width:901px){.att .person b,.att .person .sub{display:block;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+
+/* ================= waiting registration requests: details first, actions in their own row ================= */
+.reg-card{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:14px 16px;align-items:stretch}
+.rq-top{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:start}
+.rq-who{display:grid;gap:4px;min-width:0}
+.rq-name{font:700 16px/1.3 var(--display);overflow-wrap:anywhere}
+.rq-cert{font-size:13px;color:var(--muted)}
+.rq-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:13px;color:var(--muted);margin-top:2px}
+.rq-meta > span:not(.pill){display:inline-flex;align-items:center;gap:6px;min-width:0;overflow-wrap:anywhere}
+.rq-meta .ic{width:14px;height:14px;flex:none}
+.rq-ans{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.rq-ans span{display:grid;padding:5px 10px;border-radius:var(--r-s);background:var(--surface-2);font-size:13px;font-weight:600;color:var(--fg)}
+.rq-ans small{font-size:11px;font-weight:500;color:var(--muted)}
+.rq-wait{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;padding:4px 8px;border-radius:999px;background:var(--surface-2)}
+.rq-dup{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-radius:var(--r-s);background:color-mix(in srgb,var(--warn) 12%,var(--surface));font-size:13px}
+.rq-dup .ic{color:var(--warn);flex:none} .rq-dup span{flex:1 1 200px}
+.rq-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--line)}
+.rq-gap{flex:1}
+.rq-acts .rq-rej{background:none;border:0;min-height:36px;padding:0 8px;color:var(--bad);font-weight:600;font-size:14px;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.rq-acts .rq-rej:hover{background:var(--bad-bg);border-radius:var(--r-s)}
+@media (max-width:640px){
+  .rq-top{grid-template-columns:auto minmax(0,1fr)}
+  .rq-wait{grid-column:2;justify-self:start}
+  .rq-gap{display:none}
+  .rq-acts [data-ok]{order:-2;flex:1 1 100%;min-height:44px}
+  .rq-acts [data-okp]{order:-1;flex:1 1 100%}
+  .rq-acts [data-check]{flex:1}
+}

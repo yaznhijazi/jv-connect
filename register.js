@@ -1,10 +1,12 @@
 // Self-registration: a QR sign on the desk opens a form on the visitor's phone; the request waits until an admin approves it.
 // Approving creates the attendee with the next free ID, and the visitor's phone then shows their badge QR.
-import {SB, $, $$, esc, hm, dayShort, dateRange, store, toast, formData, qrSvg, barcodeSvg, selectOptions, countriesOf, initials, icon, armed, DEFAULT_COUNTRIES, countryPicker, dialog, categoriesOf} from "./core.js";
+import {SB, $, $$, esc, hm, dayShort, dateRange, store, toast, formData, qrSvg, barcodeSvg, selectOptions, countriesOf, initials, icon, armed, DEFAULT_COUNTRIES, countryPicker, dialog, categoriesOf, flag} from "./core.js";
 import {nextCode} from "./attendees.js";
 import {printDocs} from "./print.js";
 import {STD, formOf, questionInput, answersFrom, answersList, editForm} from "./regform.js";
 
+const waited = iso => { const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 6e4));
+  return m < 1 ? "Just now" : m < 60 ? `${m} min` : m < 24 * 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${dayShort(iso.slice(0, 10))} ${hm(iso)}`; };
 const regUrl = id => `${location.href.split("#")[0]}#/register/${id}`;
 const digits = s => String(s || "").replace(/\D/g, "").slice(-8);
 const publicBar = `<header class="topbar"><div class="wrap"><span class="brand"><img class="brand-mark" src="assets/jv-mark.svg" alt="" width="14" height="24">JV Connect</span></div></header>`;
@@ -153,13 +155,20 @@ export function render(el, c, ctx){
     <section class="panel"><div class="panel-head"><div><h2>Waiting for approval</h2><span class="note">${regs.length ? `${regs.length} request${regs.length === 1 ? "" : "s"}, oldest first. New ones appear every 15 seconds.` : "New requests appear here every 15 seconds."}</span></div>
         ${regs.length > 1 ? `<button type="button" id="rAll">${icon("check")}Approve all ${regs.length}</button>` : ""}</div>
       <div class="tips">${regs.map(r => { const d = dupOf(c, r);
-        return `<div class="reg-card" data-review="${r.id}" tabindex="0" role="button" aria-label="Check ${esc(r.full_name)}"><span class="av">${esc(initials(r.full_name))}</span><div style="min-width:0"><b>${esc(r.full_name)}</b>${r.cert_name && r.cert_name !== r.full_name ? ` <span class="note">certificate: ${esc(r.cert_name)}</span>` : ""}
-          <div class="meta">${[r.category, r.entity, r.country, r.phone, r.email].filter(Boolean).map(esc).map(x => `<span>${x}</span>`).join("")}<span>${dayShort(r.created_at.slice(0, 10))} ${hm(r.created_at)}</span></div>
-          ${r.answers && Object.keys(r.answers).length ? `<div class="meta ans-meta">${formOf(c.conf).questions.filter(q => r.answers[q.id]).map(q => `<span><b>${esc(q.label)}:</b> ${esc(r.answers[q.id])}</span>`).join("")}</div>` : ""}
-          ${d ? `<div class="pill warn" style="margin-top:6px">Looks like ${esc(d.code)} ${esc(d.full_name)}, already registered</div>` : ""}</div>
-          <div class="acts">${d ? `<button type="button" class="ghost small" data-link="${r.id}" data-to="${d.id}">Same person, use ${esc(d.code)}</button>` : ""}
-            <button type="button" class="ghost small" data-check="${r.id}">${icon("search")}Check and edit</button><button type="button" class="danger small" data-rej="${r.id}">Reject</button><button type="button" class="ghost small" data-okp="${r.id}">${icon("print")}Approve and print</button>
-            <button type="button" class="small" data-ok="${r.id}">${icon("check")}Approve</button></div></div>`; }).join("")
+        const ans = r.answers && Object.keys(r.answers).length ? formOf(c.conf).questions.filter(q => r.answers[q.id]) : [];
+        return `<div class="reg-card" data-review="${r.id}" tabindex="0" role="button" aria-label="Check ${esc(r.full_name)}">
+          <div class="rq-top"><span class="av">${esc(initials(r.full_name))}</span>
+            <div class="rq-who"><b class="rq-name" dir="auto">${esc(r.full_name)}</b>${r.cert_name && r.cert_name !== r.full_name ? `<span class="rq-cert" dir="auto">On certificate: ${esc(r.cert_name)}</span>` : ""}
+              <div class="rq-meta">${r.category ? `<span class="pill acc">${esc(r.category)}</span>` : ""}
+                ${r.entity ? `<span dir="auto">${icon("home", "ic sm")}${esc(r.entity)}</span>` : ""}
+                ${r.country ? `<span>${flag(r.country)}${esc(r.country)}</span>` : ""}
+                ${r.phone ? `<span class="num">${icon("user", "ic sm")}${esc(r.phone)}</span>` : ""}
+                ${r.email ? `<span>${esc(r.email)}</span>` : ""}</div>
+              ${ans.length ? `<div class="rq-ans">${ans.map(q => `<span><small>${esc(q.label)}</small>${esc(r.answers[q.id])}</span>`).join("")}</div>` : ""}</div>
+            <span class="rq-wait" title="Sent ${esc(dayShort(r.created_at.slice(0, 10)))} ${hm(r.created_at)}">${icon("clock", "ic sm")}${waited(r.created_at)}</span></div>
+          ${d ? `<div class="rq-dup">${icon("alert", "ic sm")}<span>Looks like <b>${esc(d.code)} ${esc(d.full_name)}</b>, already registered</span><button type="button" class="ghost small" data-link="${r.id}" data-to="${d.id}">Same person, use ${esc(d.code)}</button></div>` : ""}
+          <div class="rq-acts"><button type="button" class="ghost small" data-check="${r.id}">${icon("search")}Check and edit</button><button type="button" class="rq-rej" data-rej="${r.id}">Reject</button>
+            <span class="rq-gap"></span><button type="button" class="ghost small" data-okp="${r.id}">${icon("print")}Approve and print</button><button type="button" class="small" data-ok="${r.id}">${icon("check")}Approve</button></div></div>`; }).join("")
         || `<div class="tip"><span class="tip-ic">${icon("attendees")}</span><span><b>No one waiting</b><small>${conf.registration_open ? "Put the desk sign out; requests land here." : "Registration is closed. Open it on the right."}</small></span></div>`}</div></section>
     <section class="panel form"><div class="panel-head" style="margin:0"><h2>Desk sign</h2><span class="pill ${conf.registration_open ? "ok live" : ""}">${conf.registration_open ? "Open" : "Closed"}</span></div>
       <p class="note" style="margin:0">Visitors scan this code with their phone camera, fill in their details, and wait for you to approve them here.</p>
