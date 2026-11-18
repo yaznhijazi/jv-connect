@@ -217,12 +217,14 @@ export function confDialog(conf = null){
       <label>Hotel location (map link)<input name="location_url" type="url" maxlength="500" value="${esc(conf?.location_url)}" placeholder="https://maps.app.goo.gl/…"></label>
       <p class="note" style="margin:-6px 0 0">In Google Maps, open the hotel, tap Share, copy the link and paste it here. It shows on the registration form.</p>
       <label>Late after (minutes from a session's start)<input name="late_after_min" type="number" min="0" max="240" value="${conf?.late_after_min ?? 10}"></label>
+      <label>First badge ID<input name="id_start" type="number" min="1" max="99999999" step="1" value="${conf?.id_start ?? ""}" placeholder="1" class="num"></label>
+      <p class="note" style="margin:-6px 0 0">New people get IDs from here up, for example 5000, 5001, 5002. IDs already given don't change. Empty starts at 0001.</p>
       <label>Cover image<input name="cover" type="file" accept="image/png,image/jpeg,image/webp"></label>
       ${conf?.cover_url ? `<label class="check"><input type="checkbox" name="remove_cover"> Remove the current cover</label>` : ""}`,
     onSubmit: async form => {
       const f = formData(form);
       if (f.end_date < f.start_date) { toast("The last day can't be before the first day.", "bad"); return false; }
-      const row = {name: f.name.trim(), start_date: f.start_date, end_date: f.end_date, venue: f.venue.trim(), location_url: f.location_url.trim() || null, late_after_min: Number(f.late_after_min || 10)};
+      const row = {name: f.name.trim(), start_date: f.start_date, end_date: f.end_date, venue: f.venue.trim(), location_url: f.location_url.trim() || null, late_after_min: Number(f.late_after_min || 10), id_start: f.id_start ? Math.max(1, Math.floor(Number(f.id_start))) : null};
       if (f.remove_cover) row.cover_url = null;
       let id = conf?.id;
       if (conf) { const { error } = await SB.from("conferences").update(row).eq("id", id); if (error) throw error; }

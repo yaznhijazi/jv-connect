@@ -10,7 +10,9 @@ const FIELDS = [["code", "Main ID"], ["full_name", "Full name"], ["cert_name", "
   ["category", "Category"], ["entity", "Entity"], ["country", "Country"], ["fee_amount", "Fee (JOD)"], ["fee_paid", "Paid"], ["fee_note", "Fee note"]];
 
 // Next free 4-digit ID (0001, 0002, …), based on the highest numeric ID so far.
-export const nextCode = c => { const n = Math.max(0, ...c.attendees.map(a => /^\d+$/.test(a.code) ? Number(a.code) : 0)) + 1; return String(n).padStart(4, "0"); };
+// The next free number at or after the conference's first badge ID (Settings); IDs below it are left alone.
+export const nextCode = c => { const start = Number(c.conf.id_start) || 1;
+  const n = Math.max(start - 1, ...c.attendees.map(a => /^\d+$/.test(a.code) && Number(a.code) >= start ? Number(a.code) : 0)) + 1; return String(n).padStart(4, "0"); };
 const attendedCount = (c, a) => (c.checkinsByCode.get(a.code) || []).length;
 const options = (list, cur, all) => `<option value="">${all}</option>` + [...new Set(list.filter(Boolean))].sort().map(v => `<option ${v === cur ? "selected" : ""}>${esc(v)}</option>`).join("");
 
