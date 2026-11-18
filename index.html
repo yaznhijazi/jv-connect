@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>JV Connect</title>
+<link rel="icon" type="image/svg+xml" href="assets/jv-mark.svg">
+<meta name="theme-color" content="#005072">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://vcysyduqorgnhihbihxy.supabase.co" crossorigin>
+<!-- UI faces only (Latin and Arabic). Badge and certificate faces load when printing: see printFonts() in print.js -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Instrument+Sans:wght@400..700&family=Cairo:wght@400;600;700;800&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js" defer></script>
+</head>
+<body>
+<div id="app"></div>
+<dialog id="dlg"></dialog>
+<div id="flash" class="flash" hidden role="status" aria-live="assertive"></div>
+<div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
+<div id="printArea"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
