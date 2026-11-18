@@ -912,3 +912,20 @@ body[data-role="staff"] #rForm,body[data-role="viewer"] #rForm,body[data-role="v
   .rq-acts [data-okp]{order:-1;flex:1 1 100%}
   .rq-acts [data-check]{flex:1}
 }
+
+/* ================= attendee tags ================= */
+.tagc{--tc:var(--accent);display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;
+  color:color-mix(in srgb,var(--tc) 78%,var(--fg));background:color-mix(in srgb,var(--tc) 13%,var(--surface));border:1px solid color-mix(in srgb,var(--tc) 30%,transparent)}
+.tagc::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--tc)}
+.cat-tags{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.tag-pick{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tag-opt{position:relative;display:inline-flex;cursor:pointer}
+.tag-opt input{position:absolute;opacity:0;width:1px;height:1px}
+.tag-opt .tagc{opacity:.45;filter:saturate(.4);transition:opacity .15s,filter .15s;padding:6px 12px;font-size:13px}
+.tag-opt input:checked + .tagc{opacity:1;filter:none;box-shadow:0 0 0 2px color-mix(in srgb,var(--tc) 40%,transparent)}
+.tag-opt input:checked + .tagc::after{content:"✓";margin-left:2px}
+.tag-opt input:focus-visible + .tagc{outline:2px solid var(--accent);outline-offset:2px}
+.tag-new{width:140px!important;min-height:34px!important;padding:6px 10px!important;border-radius:999px!important}
+.tag-btn{background:none;border:0;padding:0;min-height:0;cursor:pointer}
+.tag-btn .tagc{padding:6px 12px;font-size:13px}
+body[data-role="viewer"] [data-bulk="tag"]{display:none!important}

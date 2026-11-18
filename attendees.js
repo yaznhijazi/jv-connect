@@ -1,11 +1,11 @@
 // Attendees: search, filter, add / edit / remove, import from Excel or CSV, badges and certificates.
 import {SB, $, $$, esc, hm, dayShort, t5, money, initials, toast, dialog, armed, formData, downloadCsv, slug, loadScript, qrSvg, barcodeSvg, hallName,
-  categoriesOf, countriesOf, selectOptions, today, startOf, endOf, state, icon, flag, countryPicker, can, store} from "./core.js";
+  categoriesOf, countriesOf, selectOptions, today, startOf, endOf, state, icon, flag, countryPicker, can, store, tagsOf, tagsUsed, tagChip, cleanTag} from "./core.js";
 import {printDocs, certPdf, certKind} from "./print.js";
 import {badgeUrl} from "./register.js";
 import {formOf, questionInput, answersFrom} from "./regform.js";
 
-export const view = {q: "", category: "", country: "", pay: "", sort: store.get("attSort") || "id", show: 200, sel: new Set()}; // ID order by default; the last choice is remembered
+export const view = {q: "", category: "", country: "", tag: "", pay: "", sort: store.get("attSort") || "id", show: 200, sel: new Set()}; // ID order by default; the last choice is remembered
 const FIELDS = [["code", "Main ID"], ["full_name", "Full name"], ["cert_name", "Name on certificate"], ["phone", "Phone"], ["email", "Email"],
   ["category", "Category"], ["entity", "Entity"], ["country", "Country"], ["fee_amount", "Fee (JOD)"], ["fee_paid", "Paid"], ["fee_note", "Fee note"]];
 
@@ -21,7 +21,7 @@ const SORTS = {name: (a, b) => a.full_name.localeCompare(b.full_name), id: (a, b
   new: (a, b) => String(b.created_at || "").localeCompare(String(a.created_at || ""))};
 function filtered(c){
   const q = view.q.trim().toLowerCase(), quick = (QUICK.find(x => x[0] === view.pay) || QUICK[0])[2];
-  return c.attendees.filter(a => (!view.category || a.category === view.category) && (!view.country || a.country === view.country) && quick(a, c)
+  return c.attendees.filter(a => (!view.category || a.category === view.category) && (!view.country || a.country === view.country) && (!view.tag || (a.tags || []).includes(view.tag)) && quick(a, c)
     && (!q || [a.code, a.full_name, a.cert_name, a.phone, a.email, a.entity].some(v => String(v ?? "").toLowerCase().includes(q))))
     .sort(SORTS[view.sort] || SORTS.name);
 }
@@ -30,7 +30,7 @@ export function render(el, c, ctx){
   const list = filtered(c);
   for (const id of view.sel) if (!c.attendees.some(a => a.id === id)) view.sel.delete(id);
   const sel = c.attendees.filter(a => view.sel.has(a.id));
-  const narrowed = view.q || view.category || view.country || view.pay;
+  const narrowed = view.q || view.category || view.country || view.tag || view.pay, nFilt = [view.category, view.country, view.tag].filter(Boolean).length, used = tagsUsed(c);
   el.innerHTML = `<div class="att-top">
       <div class="chips" role="group" aria-label="Quick filters">${QUICK.map(([k, l, fn]) => { const n = c.attendees.filter(a => fn(a, c)).length;
         return (k && !n) ? "" : `<button type="button" class="chip" data-quick="${k}" aria-pressed="${view.pay === k}">${l}<span>${n}</span></button>`; }).join("")}</div>
@@ -38,16 +38,17 @@ export function render(el, c, ctx){
         <button type="button" class="small fab" id="aAdd" aria-label="Add attendee">${icon("plus")}<span>Add attendee</span></button></div></div>
     <div class="panel att-panel">
     <div class="toolbar"><label class="search-field" style="max-width:none">${icon("search")}<input type="search" id="aQ" placeholder="Name, ID, phone or email" value="${esc(view.q)}" aria-label="Search attendees"></label>
-      <button type="button" class="ghost filt-btn" id="aFilt" aria-expanded="${!!view.filtersOpen}">${icon("settings")}${[view.category, view.country].filter(Boolean).length ? `<span class="dot">${[view.category, view.country].filter(Boolean).length}</span>` : ""}<span class="sr-only">Filters</span></button>
+      <button type="button" class="ghost filt-btn" id="aFilt" aria-expanded="${!!view.filtersOpen}">${icon("settings")}${nFilt ? `<span class="dot">${nFilt}</span>` : ""}<span class="sr-only">Filters</span></button>
       <div class="att-filters ${view.filtersOpen ? "open" : ""}">
       <select id="aCat" aria-label="Category">${options(categoriesOf(c), view.category, "All categories")}</select>
       <select id="aCountry" aria-label="Country">${options(c.attendees.map(a => a.country), view.country, "All countries")}</select>
+      ${used.length ? `<select id="aTag" aria-label="Tag">${options(used, view.tag, "All tags")}</select>` : ""}
       <select id="aSort" aria-label="Sort"><option value="name">Sort by name</option><option value="id" ${view.sort === "id" ? "selected" : ""}>Sort by ID</option><option value="new" ${view.sort === "new" ? "selected" : ""}>Newest first</option></select></div></div>
     <div class="att-meta"><span>${list.length === c.attendees.length ? `${c.attendees.length} attendee${c.attendees.length === 1 ? "" : "s"}` : `${list.length} of ${c.attendees.length} shown`}</span>
       ${narrowed ? `<button type="button" class="linkish" id="aClear">Clear filters</button>` : ""}</div>
     ${sel.length ? `<div class="bulkbar"><span>${sel.length} selected</span><span style="flex:1"></span>
       <button type="button" class="ghost small" data-bulk="badge">${icon("print")}Badges</button><button type="button" class="ghost small" data-bulk="certificate">${icon("print")}Certificates</button>
-      <button type="button" class="ghost small" data-bulk="paid">Mark paid</button><button type="button" class="ghost small" data-bulk="unpaid">Mark not paid</button>
+      <button type="button" class="ghost small" data-bulk="tag">${icon("tag")}Tag</button><button type="button" class="ghost small" data-bulk="paid">Mark paid</button><button type="button" class="ghost small" data-bulk="unpaid">Mark not paid</button>
       <button type="button" class="danger small" data-bulk="delete">Delete</button><button type="button" class="ghost small" data-bulk="clear" aria-label="Clear selection">${icon("x")}</button></div>` : ""}
     <div class="tbl"><table class="rt att"><thead><tr><th class="sel"><input type="checkbox" id="aAll" aria-label="Select all shown" ${list.length && list.every(a => view.sel.has(a.id)) ? "checked" : ""}></th>
       <th>Attendee</th><th>ID</th><th>Category</th><th>Entity and country</th><th>Fee</th><th>Sessions</th><th class="sr">Open</th></tr></thead><tbody>
@@ -55,7 +56,7 @@ export function render(el, c, ctx){
         return `<tr data-open="${a.id}" tabindex="0" class="${view.sel.has(a.id) ? "on" : ""}"><td class="sel"><input type="checkbox" data-sel="${a.id}" ${view.sel.has(a.id) ? "checked" : ""} aria-label="Select ${esc(a.full_name)}"></td>
         <td class="main" data-l="Attendee"><div class="person"><span class="av">${esc(initials(a.full_name))}</span><span style="min-width:0"><b>${esc(a.full_name)}</b><span class="sub">${esc(a.email || a.phone || "No contact details")}</span></span></div></td>
         <td data-l="ID"><span class="idtag num">${esc(a.code)}</span>${a.badge_printed_at ? "" : '<span class="sub">Badge not printed</span>'}</td>
-        <td data-l="Category">${a.category ? `<span class="pill">${esc(a.category)}</span>` : '<span class="muted">—</span>'}</td>
+        <td data-l="Category"><div class="cat-tags">${a.category ? `<span class="pill">${esc(a.category)}</span>` : (a.tags || []).length ? "" : '<span class="muted">—</span>'}${(a.tags || []).map(tagChip).join("")}</div></td>
         <td data-l="Entity and country" data-ec="${esc([a.entity, a.country].filter(Boolean).join(", "))}"><span class="clip">${esc(a.entity) || '<span class="muted">No entity</span>'}</span><span class="sub">${a.country ? `${flag(a.country)} ${esc(a.country)}` : ""}</span></td>
         <td data-l="Fee">${fee ? `<span class="pill ${a.fee_paid ? "ok" : "warn"}">${money(fee)} JOD, ${a.fee_paid ? "paid" : "not paid"}</span>` : '<span class="muted">Free</span>'}</td>
         <td data-l="Sessions" class="num">${n ? `<span class="att-n">${icon("check", "ic sm")}${n}</span>` : '<span class="muted">None</span>'}</td>
@@ -69,10 +70,11 @@ export function render(el, c, ctx){
   let qT; $("#aQ").oninput = e => { clearTimeout(qT); qT = setTimeout(() => { view.q = e.target.value; view.show = 200; rerender(); $("#aQ").focus(); $("#aQ").setSelectionRange(9999, 9999); }, 200); };
   $("#aCat").onchange = e => { view.category = e.target.value; rerender(); };
   $("#aCountry").onchange = e => { view.country = e.target.value; rerender(); };
+  $("#aTag") && ($("#aTag").onchange = e => { view.tag = e.target.value; view.show = 200; rerender(); });
   $("#aSort").onchange = e => { view.sort = e.target.value; store.set("attSort", view.sort); rerender(); };
   $("#aFilt").onclick = () => { view.filtersOpen = !view.filtersOpen; rerender(); };
   $$("[data-quick]", el).forEach(b => b.onclick = () => { view.pay = b.dataset.quick; view.show = 200; rerender(); });
-  const clear = () => { Object.assign(view, {q: "", category: "", country: "", pay: "", show: 200}); rerender(); };
+  const clear = () => { Object.assign(view, {q: "", category: "", country: "", tag: "", pay: "", show: 200}); rerender(); };
   $("#aClear") && ($("#aClear").onclick = clear); $("[data-clear2]", el) && ($("[data-clear2]", el).onclick = clear);
   $("#aMore") && ($("#aMore").onclick = () => { view.show += 200; rerender(); });
   $("#aAll").onchange = e => { list.forEach(a => e.target.checked ? view.sel.add(a.id) : view.sel.delete(a.id)); rerender(); };
@@ -83,8 +85,8 @@ export function render(el, c, ctx){
   $("#aAdd").onclick = () => personDialog(c, null, ctx);
   $("[data-add2]", el) && ($("[data-add2]", el).onclick = () => personDialog(c, null, ctx));
   const qs = formOf(c.conf).questions;
-  $("#aExport").onclick = () => downloadCsv(`attendees-${slug(c.conf.name)}`, [...FIELDS.map(f => f[1]), "Sessions attended", ...qs.map(q => q.label)],
-    (sel.length ? sel : list).map(a => [...FIELDS.map(([k]) => k === "fee_paid" ? (a.fee_paid ? "Yes" : "No") : a[k]), attendedCount(c, a), ...qs.map(q => (a.answers || {})[q.id] || "")]));
+  $("#aExport").onclick = () => downloadCsv(`attendees-${slug(c.conf.name)}`, [...FIELDS.map(f => f[1]), "Tags", "Sessions attended", ...qs.map(q => q.label)],
+    (sel.length ? sel : list).map(a => [...FIELDS.map(([k]) => k === "fee_paid" ? (a.fee_paid ? "Yes" : "No") : a[k]), (a.tags || []).join(", "), attendedCount(c, a), ...qs.map(q => (a.answers || {})[q.id] || "")]));
   $("#aImport").onclick = () => importDialog(c, ctx);
   $("#aPaste").onclick = () => pasteDialog(c, ctx);
   $("[data-imp2]", el) && ($("[data-imp2]", el).onclick = () => importDialog(c, ctx));
@@ -92,9 +94,35 @@ export function render(el, c, ctx){
     const k = b.dataset.bulk, ids = sel.map(a => a.id);
     if (k === "clear") { view.sel.clear(); return rerender(); }
     if (k === "badge" || k === "certificate") return printDocs(c, k, sel);
+    if (k === "tag") return tagDialog(c, sel, ctx);
     if (k === "paid" || k === "unpaid") { const { error } = await SB.from("attendees").update({fee_paid: k === "paid"}).in("id", ids); if (error) return toast(error.message, "bad"); toast(`${ids.length} marked ${k === "paid" ? "paid" : "not paid"}`); return ctx.reload(); }
     if (k === "delete") return armed(b, async () => { const { error } = await SB.from("attendees").delete().in("id", ids); if (error) return toast(error.message, "bad"); view.sel.clear(); toast(`${ids.length} deleted`); ctx.reload(); });
   });
+}
+
+/* ---------- tags ---------- */
+// Tick the tags this person has; type a new one to create it.
+export function tagPicker(c, cur){
+  const all = [...new Set([...cur, ...tagsOf(c)])];
+  return `<div class="tag-pick">${all.map(t => `<label class="tag-opt"><input type="checkbox" name="tag" value="${esc(t)}" ${cur.includes(t) ? "checked" : ""}>${tagChip(t)}</label>`).join("")}
+    <input name="tagNew" maxlength="40" placeholder="New tag" aria-label="New tag" class="tag-new"></div>`;
+}
+export const tagsFrom = form => { const fd = new FormData(form); return [...new Set([...fd.getAll("tag"), fd.get("tagNew")].map(cleanTag).filter(Boolean))].slice(0, 20); };
+function tagDialog(c, people, ctx){
+  const d = dialog({need: "edit", title: `Tag ${people.length} ${people.length === 1 ? "person" : "people"}`, submit: "Add tag", danger: "Remove tag", dangerNeed: "edit",
+    body: `<label>Tag<input name="t" list="tdTags" maxlength="40" required placeholder="Workshop" autocomplete="off"></label><datalist id="tdTags">${tagsOf(c).map(t => `<option value="${esc(t)}">`).join("")}</datalist>
+      <div class="tag-pick">${tagsOf(c).map(t => `<button type="button" class="tag-btn" data-t="${esc(t)}">${tagChip(t)}</button>`).join("")}</div>
+      <p class="note" style="margin:0">Pick a tag or type a new one. "Remove tag" takes it off everyone selected.</p>`,
+    onSubmit: async form => save(cleanTag(form.t.value), true),
+    onDanger: async () => save(cleanTag($("[name=t]", d).value), false)});
+  $$("[data-t]", d).forEach(b => b.onclick = () => { $("[name=t]", d).value = b.dataset.t; });
+  async function save(t, add){
+    if (!t) { toast("Pick or type a tag first.", "bad"); return false; }
+    const todo = people.filter(a => add !== (a.tags || []).includes(t));
+    for (let i = 0; i < todo.length; i += 25)
+      await Promise.all(todo.slice(i, i + 25).map(a => SB.from("attendees").update({tags: add ? [...(a.tags || []), t] : (a.tags || []).filter(x => x !== t)}).eq("id", a.id).then(r => { if (r.error) throw r.error; })));
+    toast(add ? `Tagged ${todo.length} with “${t}”` : `Removed “${t}” from ${todo.length}`); view.sel.clear(); await ctx.reload();
+  }
 }
 
 /* ---------- right after adding: the next thing you usually want ---------- */
@@ -130,11 +158,12 @@ function pasteDialog(c, ctx){
       <textarea id="plText" rows="8" placeholder="Huda Ahmed Saleh&#10;Ramzi Ahmed Alwan" aria-label="Names, one per line"></textarea>
       <div class="form-grid"><label>Category for all<select name="category">${selectOptions(cats, cats.includes("Participant") ? "Participant" : "", "No category")}</select></label>
         ${countryPicker("country", "", countriesOf(c.conf), {label: "Country for all"})}</div>
+      <label>Tag for all (optional)<input name="tag" list="plTags" maxlength="40" placeholder="Workshop"></label><datalist id="plTags">${tagsOf(c).map(t => `<option value="${esc(t)}">`).join("")}</datalist>
       <label class="check"><input type="checkbox" name="skipDup" checked> Skip names already registered</label>
       <div id="plPrev" class="pl-prev" aria-live="polite"></div>`,
     onSubmit: async form => {
       const list = plan(); if (!list.add.length) { toast("Paste at least one new name.", "bad"); return false; }
-      const f = formData(form), rows = list.add.map(x => ({conference_id: c.conf.id, code: x.code, full_name: x.name, category: f.category || "", country: f.country || "", fee_amount: 0, fee_paid: false, fee_note: "Added from a pasted list"}));
+      const f = formData(form), rows = list.add.map(x => ({conference_id: c.conf.id, code: x.code, full_name: x.name, category: f.category || "", country: f.country || "", fee_amount: 0, fee_paid: false, fee_note: "Added from a pasted list", ...(cleanTag(f.tag) ? {tags: [cleanTag(f.tag)]} : {})}));
       const { data: made, error } = await SB.from("attendees").insert(rows).select();
       if (error) throw error;
       await ctx.reload();
@@ -189,6 +218,7 @@ function personDialog(c, a, ctx){
         <label>Email<input name="email" type="email" maxlength="200" value="${esc(a?.email)}" placeholder="For the certificate" autocomplete="off"></label>
         <label>Entity<input name="entity" list="entList" maxlength="200" value="${esc(a?.entity)}" placeholder="Hospital, university, company"></label>
         ${countryPicker("country", a?.country || "", countriesOf(c.conf))}</div></fieldset>
+      <fieldset class="fs"><legend>${icon("tag")}Tags</legend>${tagPicker(c, a?.tags || [])}</fieldset>
       ${rf.questions.length ? `<fieldset class="fs"><legend>${icon("tag")}Registration answers</legend><div class="form-grid">${rf.questions.map(q => questionInput({...q, required: false}, (a?.answers || {})[q.id] || "")).join("")}</div></fieldset>` : ""}
       <fieldset class="fs" ${can("manage") ? "" : "disabled"}><legend>${icon("money")}Fee${can("manage") ? "" : ' <span class="note" style="font-weight:500">only owners and admins change fees</span>'}</legend><div class="fee-row">
         <label>Amount (JOD)<input name="fee_amount" type="number" min="0" step="0.01" inputmode="decimal" value="${a ? Number(a.fee_amount) : 0}" class="num"></label>
@@ -208,6 +238,7 @@ function personDialog(c, a, ctx){
       const row = {conference_id: c.conf.id, code: f.code.trim(), full_name: f.full_name.trim(), cert_name: f.cert_name.trim(), phone: f.phone.trim(), email: f.email.trim(),
         category: f.category.trim(), entity: f.entity.trim(), country: f.country.trim(), fee_amount: Number(f.fee_amount || 0), fee_paid: !!f.fee_paid, fee_note: (f.fee_note || "").trim()};
       if (!can("manage")) { delete row.fee_amount; delete row.fee_paid; delete row.fee_note; } // staff: fees stay as they are (the database checks this too)
+      row.tags = tagsFrom(form);
       if (rf.questions.length) { const ans = {...(a?.answers || {})}; for (const q of rf.questions) delete ans[q.id]; row.answers = {...ans, ...answersFrom(rf, form)}; }
       const clash = c.attendees.find(x => x.code === row.code && x.id !== a?.id);
       if (clash) { toast(`ID ${row.code} already belongs to ${clash.full_name}.`, "bad"); return false; }

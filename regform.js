@@ -14,7 +14,7 @@ export const PRESETS = [
   {label: "Job title", label_ar: "المسمى الوظيفي", type: "choice", required: true, options: ["Consultant", "Specialist", "Resident", "General Practitioner", "Nurse", "Pharmacist", "Dietitian", "Student", "Other"]},
   {label: "Medical syndicate or license number", label_ar: "رقم النقابة أو الترخيص", type: "text", required: false, options: []},
   {label: "Years of experience", label_ar: "سنوات الخبرة", type: "number", required: false, options: []},
-  {label: "Will you attend the workshop?", label_ar: "هل ستحضر الورشة؟", type: "yesno", required: false, options: []},
+  {label: "Will you attend the workshop?", label_ar: "هل ستحضر الورشة؟", type: "yesno", required: false, options: [], tag_on_yes: "Workshop"},
 ];
 export const formOf = conf => ({fields: {...DEFAULT_FIELDS, ...(conf?.reg_form?.fields || {})}, questions: (conf?.reg_form?.questions || []).filter(q => q && q.id && q.label)});
 const newId = () => "q" + Math.random().toString(36).slice(2, 8);
@@ -62,6 +62,7 @@ export function editForm(c, ctx){
           <label>In Arabic (optional)<input data-k="label_ar" dir="rtl" value="${esc(q.label_ar || "")}" maxlength="120" placeholder="التخصص"></label>
           <label>Answer<select data-k="type">${TYPES.map(([v, l]) => `<option value="${v}" ${q.type === v ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
         ${q.type === "choice" ? `<label>Choices, one per line<textarea data-k="options" rows="4">${esc((q.options || []).join("\n"))}</textarea></label>` : ""}
+        ${q.type === "yesno" ? `<label>When they answer Yes, tag them (optional)<input data-k="tag_on_yes" value="${esc(q.tag_on_yes || "")}" maxlength="40" placeholder="Workshop"></label>` : ""}
         <div class="row" style="align-items:center"><label class="check"><input type="checkbox" data-k="required" ${q.required ? "checked" : ""}> Required</label>
           <span style="margin-left:auto"></span><button type="button" class="ghost small" data-mv="-1" ${i ? "" : "disabled"} aria-label="Move up">↑</button><button type="button" class="ghost small" data-mv="1" ${i < st.questions.length - 1 ? "" : "disabled"} aria-label="Move down">↓</button>
           <button type="button" class="danger small" data-rm>Remove</button></div></div>`).join("") || '<p class="note" style="margin:0">No questions of your own yet.</p>'}</div>

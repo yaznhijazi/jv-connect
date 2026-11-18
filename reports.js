@@ -102,6 +102,9 @@ async function workbook(c, btn){
     add("By category", grp("category")); add("By country", grp("country"));
     add("No-shows", [["Name", "ID", "Category", "Entity", "Country", "Phone", "Email"], ...c.attendees.filter(a => !c.checkinsByCode.has(a.code)).map(a => [a.full_name, a.code, a.category, a.entity, a.country, a.phone, a.email])]);
     add("Fees", [["Name", "ID", "Category", "Fee (JOD)", "Paid", "Note"], ...c.attendees.filter(a => Number(a.fee_amount)).map(a => [a.full_name, a.code, a.category, Number(a.fee_amount), a.fee_paid ? "Yes" : "No", a.fee_note || ""])]);
+    const tagNames = [...new Set(c.attendees.flatMap(a => a.tags || []))].sort();
+    if (tagNames.length) add("Tags", [["Tag", "People", "Came at least once"], ...tagNames.map(t => { const p = c.attendees.filter(a => (a.tags || []).includes(t)); return [t, p.length, p.filter(a => c.checkinsByCode.has(a.code)).length]; }),
+      [], ["ID", "Name", "Tags"], ...c.attendees.filter(a => (a.tags || []).length).sort((a, b) => a.code.localeCompare(b.code, undefined, {numeric: true})).map(a => [a.code, a.full_name, a.tags.join(", ")])]);
     const qs = formOf(c.conf).questions;
     if (qs.length) add("Registration answers", [["ID", "Name", "Category", ...qs.map(q => q.label)], ...c.attendees.slice().sort((a, b) => a.code.localeCompare(b.code, undefined, {numeric: true})).map(a => [a.code, a.full_name, a.category, ...qs.map(q => (a.answers || {})[q.id] || "")])]);
     const byId = new Map(c.attendees.map(a => [a.id, a]));

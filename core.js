@@ -111,6 +111,13 @@ export function countryPicker(name, value, list, {label = "Country", empty = "No
 }
 // Category list = the conference's list, plus any category already used by an attendee (so nothing disappears).
 export const categoriesOf = c => [...new Set([...(c.conf.categories || []), ...c.attendees.map(a => a.category).filter(Boolean)])];
+// Tags on attendees ("Workshop", "Gala dinner"…): the ones in use, plus a few suggestions. Each tag keeps one colour everywhere.
+export const TAG_SUGGESTIONS = ["Workshop", "Gala dinner", "VIP", "Speaker dinner", "Sponsor guest"];
+export const tagsUsed = c => [...new Set(c.attendees.flatMap(a => a.tags || []))].sort((a, b) => a.localeCompare(b));
+export const tagsOf = c => [...new Set([...tagsUsed(c), ...TAG_SUGGESTIONS])];
+export const tagChip = t => { let h = 0; for (const ch of String(t)) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return `<span class="tagc" style="--tc:var(--h${h % 6 + 1})">${esc(t)}</span>`; };
+export const cleanTag = t => String(t || "").replace(/\s+/g, " ").trim().slice(0, 40);
 // A <select> that always keeps the current value, even if it isn't in the list any more.
 export const selectOptions = (list, cur, empty = "Choose…") =>
   `<option value="">${esc(empty)}</option>` + [...new Set([...(cur && !list.includes(cur) ? [cur] : []), ...list])].map(v => `<option ${v === cur ? "selected" : ""}>${esc(v)}</option>`).join("");

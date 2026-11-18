@@ -103,9 +103,11 @@ const dupOf = (c, r) => c.attendees.find(a => (digits(r.phone).length >= 7 && di
   || a.full_name.trim().toLowerCase() === r.full_name.trim().toLowerCase());
 const row = (r, code) => ({conference_id: r.conference_id, code, full_name: r.full_name, cert_name: r.cert_name, phone: r.phone, email: r.email,
   category: r.category, entity: r.entity, country: r.country, fee_amount: 0, fee_paid: false, fee_note: "Self-registered", ...(r.answers && Object.keys(r.answers).length ? {answers: r.answers} : {})});
+// Yes/no questions can tag the person ("Will you attend the workshop?" Yes → Workshop).
+const autoTags = (c, r) => formOf(c.conf).questions.filter(q => q.type === "yesno" && q.tag_on_yes && (r.answers || {})[q.id] === "Yes").map(q => q.tag_on_yes.trim()).filter(Boolean);
 async function approve(c, list, ctx, {print = false} = {}){
   let n = Number(nextCode(c));
-  const rows = list.map(r => row(r, r.code || String(n++).padStart(4, "0")));
+  const rows = list.map(r => { const x = row(r, r.code || String(n++).padStart(4, "0")), t = autoTags(c, r); if (t.length) x.tags = [...new Set(t)]; return x; });
   const { data: made, error } = await SB.from("attendees").insert(rows).select("*");
   if (error) { toast(error.message, "bad"); return false; }
   const byCode = new Map(made.map(a => [a.code, a])), at = new Date().toISOString();

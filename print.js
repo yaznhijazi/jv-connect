@@ -1,6 +1,6 @@
 // Badge and certificate designer + printing. Positions are in millimetres from the top-left of the page,
 // so a layout lines up the same on screen and on paper. A printer offset fixes printers that shift the page.
-import {SB, $, $$, esc, dateRange, dayLong, toast, upload, qrSvg, barcodeSvg, loadScript, categoriesOf, icon, can} from "./core.js";
+import {SB, $, $$, esc, dateRange, dayLong, toast, upload, qrSvg, barcodeSvg, loadScript, categoriesOf, icon, can, tagsUsed} from "./core.js";
 
 const PX_PER_MM = 96 / 25.4;
 export const FONTS = ["Plus Jakarta Sans", "Arial", "Georgia", "Times New Roman", "Playfair Display", "Cormorant Garamond", "Great Vibes", "Cairo", "Amiri"];
@@ -230,6 +230,7 @@ export function render(el, c, ctx){
         <label class="mode"><input type="radio" name="pMode" value="text" ${full ? "" : "checked"}><b>Text only</b><span>Just the names, for ${noun}s that already have the design printed on them.</span></label></div>`
       : `<p class="note" style="margin:0">No design yet, so only the text prints. To print on your designer's artwork, add their PDF in <button type="button" class="linkish" data-tab="edit">Edit layout</button>.</p>`}
       <label>Who<select id="pWho"><option value="all">Everyone (${c.attendees.length})</option>${cats.map(k => `<option value="cat:${esc(k)}">${esc(k)} (${nCat(k)})</option>`).join("")}
+        ${tagsUsed(c).map(t => `<option value="tag:${esc(t)}">Tagged “${esc(t)}” (${c.attendees.filter(a => (a.tags || []).includes(t)).length})</option>`).join("")}
         <option value="attended">Attended at least one session (${c.attendees.filter(a => c.checkinsByCode.has(a.code)).length})</option>
         ${ui.kind === "badge" ? `<option value="new">Badge not printed yet (${c.attendees.filter(a => !a.badge_printed_at).length})</option>` : ""}<option value="ids">Only these IDs or ranges…</option></select></label>
       <textarea id="pIds" hidden placeholder="0427 3815 1200, or a range: 0001-0100" aria-label="IDs or ranges to print"></textarea>
@@ -331,6 +332,7 @@ export function render(el, c, ctx){
     const pick = () => {
       const who = $("#pWho").value; let people = c.attendees;
       if (who.startsWith("cat:")) people = people.filter(a => a.category === who.slice(4));
+      if (who.startsWith("tag:")) people = people.filter(a => (a.tags || []).includes(who.slice(4)));
       if (who === "attended") people = people.filter(a => c.checkinsByCode.has(a.code));
       if (who === "new") people = people.filter(a => !a.badge_printed_at);
       if (who === "ids") { const want = parseIds($("#pIds").value); people = people.filter(a => want(a.code)); }
