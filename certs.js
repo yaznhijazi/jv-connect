@@ -1,7 +1,7 @@
 // Certificates: visitors request one from a QR on the table, you check it against real attendance and approve,
 // the certificate (your designer layout, one page per workshop) is emailed through the conference Gmail.
 // You can also email everyone who attended a session in one go.
-import {SB, $, $$, esc, t5, hm, dayShort, dateRange, store, toast, armed, dialog, qrSvg, icon, initials, fetchAll} from "./core.js";
+import {SB, $, $$, esc, t5, hm, dayShort, dateRange, store, toast, armed, dialog, qrSvg, icon, initials, fetchAll, tagsOf} from "./core.js";
 import {certPdf, certShowsSession} from "./print.js";
 
 const formUrl = id => `${location.href.split("#")[0]}#/cert/${id}`;
@@ -45,6 +45,80 @@ export async function renderPublic(app, confId){
       <button type="button" class="ghost" id="cfAgain">Request for someone else</button></div>`;
     $("#cfAgain").onclick = () => renderPublic(app, confId);
   };
+}
+
+/* ---------- self-service: badge ID in, certificate out by email (one per workshop, name locked after the first) ---------- */
+export const selfUrl = id => `${location.href.split("#")[0]}#/mycert/${id}`;
+const errText = async error => { try { return (await error.context.json()).error; } catch { return "No connection. Check your internet and try again."; } };
+export async function renderSelf(app, confId){
+  app.innerHTML = publicBar + `<main><div class="wrap"><div class="scan-wrap" id="pg"><div class="empty">Loading…</div></div></div></main>`;
+  const { data: f, error } = await SB.rpc("c_cert_self_info", {p_conf: confId});
+  if (error) throw error;
+  const pg = $("#pg"), L = (en, ar) => `${en} <span dir="rtl" class="ms-ar">${ar}</span>`;
+  const head = f ? `<div class="panel ms-head"><h1>${esc(f.name)}</h1><p class="note">${esc(dateRange(f.start_date, f.end_date))}${f.venue ? ", " + esc(f.venue) : ""}</p></div>` : "";
+  if (!f || !f.open || !f.workshops.length) { pg.innerHTML = head + `<div class="panel empty-state">${icon("clock", "ic lg")}<h2>Certificates aren't available yet</h2><p>Please ask at the registration desk. <span dir="rtl">يرجى السؤال في مكتب التسجيل.</span></p></div>`; return; }
+  const c = {conf: f, layouts: f.layout ? [{kind: "certificate", layout: f.layout}] : []};
+
+  const askId = (code = "", msg = "") => {
+    pg.innerHTML = head + `<form class="panel form" id="msId" novalidate><div><h2>${L("Get your workshop certificate", "احصل على شهادة الورشة")}</h2>
+        <p class="note" style="margin:4px 0 0">Type the ID printed on your badge, under the QR code. <span dir="rtl" style="display:block">اكتب الرقم المطبوع على بطاقتك تحت رمز QR.</span></p></div>
+      <label>${L("Badge ID", "رقم البطاقة")}<input name="code" required maxlength="32" inputmode="numeric" autocomplete="off" class="ms-code" value="${esc(code)}" placeholder="0001"></label>
+      <button type="submit" class="big-btn">Continue <span dir="rtl">متابعة</span></button><p class="note ms-err" role="status">${esc(msg)}</p></form>`;
+    const form = $("#msId"); form.code.focus();
+    form.onsubmit = async e => { e.preventDefault(); const v = clean(form.code.value); if (!v) return $(".ms-err", form).textContent = "Type your badge ID.";
+      const btn = $("button", form); btn.disabled = true;
+      const { data: p, error } = await SB.rpc("c_cert_self_lookup", {p_conf: confId, p_code: v}); btn.disabled = false;
+      if (error) return $(".ms-err", form).textContent = "No connection. Check your internet and try again.";
+      if (p.closed) return renderSelf(app, confId);
+      if (!p.found) return $(".ms-err", form).textContent = "No attendee has that badge ID. Check the number on your badge.";
+      if (!p.items.length) return $(".ms-err", form).textContent = "Your badge isn't registered for a workshop. Please ask at the registration desk.";
+      confirm(p); };
+  };
+
+  const confirm = (p, msg = "") => {
+    const open = p.items.filter(w => !w.sent_at);
+    pg.innerHTML = head + `<form class="panel form" id="msOk" novalidate><div class="ms-who"><span class="pill acc">${esc(p.code)}</span><span class="note">${esc(p.category || "")}</span>
+        <button type="button" class="linkish" id="msBack">Not you?</button></div>
+      ${p.locked ? `<div class="ms-locked"><span class="note">${L("Name on the certificate", "الاسم على الشهادة")}</span><b dir="auto">${esc(p.name)}</b><input type="hidden" name="name" value="${esc(p.name)}"></div>`
+        : `<label>${L("Name on the certificate", "الاسم على الشهادة")}<input name="name" required maxlength="120" value="${esc(p.name)}" dir="auto" class="ms-name"></label>`}
+      <p class="note" style="margin:-6px 0 0">${p.locked ? "This name was used on a certificate already sent, so it can't be changed here. Ask the registration desk if it's wrong."
+        : "Check the spelling: this is exactly how it prints. You can't change it after the certificate is sent. <span dir=\"rtl\" style=\"display:block\">تأكد من الاسم، لا يمكن تعديله بعد الإرسال.</span>"}</p>
+      ${p.has_email ? `<div class="ms-mail">${icon("mail")}<span>Sent to your email on file, <b>${esc(p.email_hint)}</b></span></div>`
+        : `<label>${L("Your email", "بريدك الإلكتروني")}<input name="email" type="email" required maxlength="200" autocomplete="email" inputmode="email" placeholder="name@example.com"></label>
+           <p class="note" style="margin:-6px 0 0">We don't have an email for you yet. Add one so we can send the certificate.</p>`}
+      <fieldset class="ms-ws"><legend>${L("Your workshops", "ورش العمل")}</legend>${p.items.map(w => `<label class="check ${w.sent_at ? "done" : ""}">
+          <input type="checkbox" name="w" value="${esc(w.id)}" ${w.sent_at ? "disabled" : "checked"}><span>${esc(w.title)}${w.day ? ` <span class="note">${esc(dayShort(w.day))}</span>` : ""}</span>
+          ${w.sent_at ? `<span class="pill ok">Sent ${esc(dayShort(w.sent_at.slice(0, 10)))}</span>` : ""}</label>`).join("")}</fieldset>
+      ${open.length ? `<button type="submit" class="big-btn">Email my certificate${open.length > 1 ? "s" : ""} <span dir="rtl">أرسل الشهادة</span></button>`
+        : `<p class="note" style="margin:0">Every certificate for your workshops was already sent. Check your inbox and spam folder, or ask the registration desk.</p>`}
+      <p class="note ms-err" role="status">${esc(msg)}</p></form>`;
+    const form = $("#msOk"); $("#msBack").onclick = () => askId();
+    form.onsubmit = async e => { e.preventDefault(); const err = $(".ms-err", form);
+      const name = clean(form.name.value).replace(/\s+/g, " "), email = form.email ? clean(form.email.value).toLowerCase() : "";
+      const picked = $$("input[name=w]:checked", form).map(x => p.items.find(w => w.id === x.value));
+      if (name.length < 2) return err.textContent = "Type your full name.";
+      if (form.email && !EMAIL.test(email)) return err.textContent = "That email doesn't look right. Check it and try again.";
+      if (!picked.length) return err.textContent = "Tick at least one workshop.";
+      $$("button, input", form).forEach(x => x.disabled = true); err.style.color = "";
+      const sent = []; let hint = p.email_hint;
+      for (const [i, w] of picked.entries()) {
+        err.textContent = `Making your certificate${picked.length > 1 ? ` ${i + 1} of ${picked.length}` : ""}…`;
+        const pdf = await b64(await certPdf(c, [{code: p.code, category: p.category, full_name: name, cert_name: name, session_title: w.title, session_day: w.day}], {kind: "certificate"}));
+        err.textContent = "Sending…";
+        const { data, error } = await SB.functions.invoke("cert-self", {body: {conf: confId, code: p.code, workshop: w.id, name, email, pdf}});
+        if (error || !data?.ok) { const m = error ? await errText(error) : "Not sent.";
+          const { data: q } = await SB.rpc("c_cert_self_lookup", {p_conf: confId, p_code: p.code});
+          return confirm(q?.found ? q : p, sent.length ? `Sent ${sent.join(", ")}. ${m}` : m); }
+        sent.push(w.title); hint = data.email_hint;
+      }
+      pg.innerHTML = head + `<div class="panel reg-done"><span class="pill ok">Sent</span><h2>${esc(name)}</h2>
+        <p style="margin:0">Your certificate${sent.length > 1 ? "s are" : " is"} on the way to <b>${esc(hint)}</b>:</p><ul class="ms-list">${sent.map(t => `<li>${esc(t)}</li>`).join("")}</ul>
+        <p class="note" dir="rtl" style="margin:0">تم إرسال الشهادة إلى بريدك الإلكتروني.</p><p class="note" style="margin:0">Not in your inbox in a few minutes? Check the spam or junk folder.</p>
+        <button type="button" class="ghost" id="msAgain">Get a certificate for someone else</button></div>`;
+      $("#msAgain").onclick = () => askId();
+    };
+  };
+  askId();
 }
 
 /* ---------- admin ---------- */
@@ -97,6 +171,7 @@ function draw(el, c, ctx){
         <div class="tips" id="cList">${list.map(r => card(c, r)).join("") || `<div class="empty-state" style="padding:28px">${icon(ui.tab === "pending" ? "check" : "search", "ic lg")}<p style="margin:0">${q ? "Nobody matches." : ui.tab === "pending" ? (conf.cert_form_open ? "Nobody is waiting. New requests appear here by themselves." : "Nobody is waiting. Open the request form on the right so people can ask.") : "Nothing here yet."}</p></div>`}</div>
       </section>
       <div style="display:grid;gap:20px;align-content:start">
+        ${selfPanel(c)}
         <section class="panel form"><div class="panel-head" style="margin:0"><h2>Request form</h2><span class="pill ${conf.cert_form_open ? "ok live" : ""}">${conf.cert_form_open ? "Open" : "Closed"}</span></div>
           <div class="codes" style="justify-content:center"><div style="width:150px;height:150px">${qrSvg(formUrl(conf.id))}</div></div>
           <div class="linkbox"><input readonly value="${esc(formUrl(conf.id))}" onfocus="this.select()" aria-label="Certificate request link"><button type="button" class="ghost small" id="cCopy">Copy</button></div>
@@ -110,7 +185,55 @@ function draw(el, c, ctx){
           <label>Subject<input id="cSubj" value="${esc(mailText().subject)}"></label><label>Message<textarea id="cBody" rows="7">${esc(mailText().body)}</textarea></label>
           <span class="note">{name} becomes the name on the certificate. The person's name is added to the start of the subject.</span></div></details>
       </div></div>`;
-  wire(el, c, ctx, list);
+  wire(el, c, ctx, list); wireSelf(el, c, ctx);
+}
+/* ---------- self-service setup (team) ---------- */
+const selfOf = c => ({open: false, workshops: [], ...(c.conf.cert_self || {})});
+const sentList = c => c.attendees.flatMap(a => Object.entries(a.cert_sent || {}).map(([wid, v]) => ({a, wid, ...v}))).sort((x, y) => String(y.at).localeCompare(String(x.at)));
+function selfPanel(c){
+  const cs = selfOf(c), sent = sentList(c), title = id => cs.workshops.find(w => w.id === id)?.title || "Removed workshop";
+  const count = w => c.attendees.filter(a => (a.tags || []).includes(w.tag)).length;
+  return `<section class="panel form" id="msPanel"><div class="panel-head" style="margin:0"><h2>Certificate by badge ID</h2><span class="pill ${cs.open ? "ok live" : ""}">${cs.open ? "Open" : "Closed"}</span></div>
+    <p class="note" style="margin:0">People type their badge ID, confirm the name, and get the certificate by email at once. Each workshop is sent once, and the name can't change after the first one.</p>
+    <div class="ms-wlist">${cs.workshops.map(w => `<div class="ms-wrow"><b>${esc(w.title)}</b><span class="note">${w.day ? esc(dayShort(w.day)) + ", " : ""}${count(w)} tagged ${esc(w.tag)}</span></div>`).join("")
+      || `<p class="note" style="margin:0">No workshops yet. Add one and pick the tag of the people who attended it.</p>`}</div>
+    ${cs.workshops.length ? `<div class="codes" style="justify-content:center"><div style="width:150px;height:150px">${qrSvg(selfUrl(c.conf.id))}</div></div>
+      <div class="linkbox"><input readonly value="${esc(selfUrl(c.conf.id))}" onfocus="this.select()" aria-label="Certificate by badge ID link"><button type="button" class="ghost small" id="msCopy">Copy</button></div>` : ""}
+    <div class="row"><button type="button" id="msWs" class="${cs.workshops.length ? "ghost" : ""}">${cs.workshops.length ? "Edit workshops" : "Add workshops"}</button>
+      ${cs.workshops.length ? `<button type="button" id="msToggle" class="${cs.open ? "ghost" : ""}">${cs.open ? "Close" : "Open it"}</button><button type="button" class="ghost" id="msSign">${icon("print")}Table sign</button>` : ""}</div>
+    ${sent.length ? `<details class="ms-sent"><summary>${sent.length} sent by badge ID</summary><div class="ms-slist">${sent.map(x => `<div class="ms-srow"><span><b>${esc(x.a.code)} ${esc(x.name || x.a.full_name)}</b>
+        <small>${esc(title(x.wid))}, ${esc(x.email || "")}${x.at ? `, ${dayShort(x.at.slice(0, 10))} ${hm(x.at)}` : ""}</small></span>
+        <button type="button" class="ghost small ms-allow" data-allow="${x.a.id}" data-w="${esc(x.wid)}">Allow again</button></div>`).join("")}</div>
+      <p class="note" style="margin:6px 0 0">Allow again lets that person send this certificate once more. If it was their only one, they can also correct the name.</p></details>` : ""}</section>`;
+}
+function wireSelf(el, c, ctx){
+  const cs = selfOf(c), save = async patch => { const { error } = await SB.from("conferences").update({cert_self: {...cs, ...patch}}).eq("id", c.conf.id); if (error) throw error; };
+  $("#msWs").onclick = () => selfDialog(c, ctx, cs, save);
+  $("#msCopy") && ($("#msCopy").onclick = () => navigator.clipboard.writeText(selfUrl(c.conf.id)).then(() => toast("Link copied")));
+  $("#msSign") && ($("#msSign").onclick = () => printSign(c, selfUrl(c.conf.id), true));
+  $("#msToggle") && ($("#msToggle").onclick = async () => {
+    try { await save({open: !cs.open}); } catch (e) { return toast(e.message, "bad"); }
+    toast(cs.open ? "Closed" : "Open: people can get certificates by badge ID"); ctx.reload(); });
+  $$("[data-allow]", el).forEach(b => b.onclick = () => armed(b, async () => {
+    const a = c.attendees.find(x => x.id === b.dataset.allow), next = {...(a.cert_sent || {})}; delete next[b.dataset.w];
+    const { error } = await SB.from("attendees").update({cert_sent: next}).eq("id", a.id); if (error) return toast(error.message, "bad");
+    a.cert_sent = next; toast(`${a.full_name} can send it again`); draw(el, c, ctx); }));
+}
+function selfDialog(c, ctx, cs, save){
+  const tags = tagsOf(c), row = (w = {}) => `<div class="ms-drow" data-id="${esc(w.id || "")}">
+      <label>Title on the certificate<input name="title" maxlength="120" value="${esc(w.title || "")}" placeholder="Insulin pump workshop"></label>
+      <label>People tagged<select name="tag">${tags.map(t => `<option ${t === (w.tag || "Workshop") ? "selected" : ""}>${esc(t)}</option>`).join("")}</select></label>
+      <label>Date<input name="day" type="date" value="${esc(w.day || "")}"></label>
+      <button type="button" class="ghost small" data-rm aria-label="Remove workshop">${icon("x")}</button></div>`;
+  const dl = dialog({need: "manage", title: "Workshops for certificates by badge ID", submit: "Save", wide: true,
+    body: `<p class="note" style="margin:0">One certificate per workshop. Only people with the tag can get it. The title and date print in the "Workshop / session" and "Workshop date" fields of the certificate layout.</p>
+      <div id="msRows" style="display:grid;gap:10px">${(cs.workshops.length ? cs.workshops : [{}]).map(row).join("")}</div>
+      <button type="button" class="ghost small" id="msAdd" style="justify-self:start">${icon("plus")}Add workshop</button>`,
+    onSubmit: async form => {
+      const ws = $$(".ms-drow", form).map(r => ({id: r.dataset.id || "w" + Math.random().toString(36).slice(2, 8), title: $("[name=title]", r).value.trim().replace(/\s+/g, " "), tag: $("[name=tag]", r).value, day: $("[name=day]", r).value})).filter(w => w.title);
+      await save({workshops: ws, ...(ws.length ? {} : {open: false})}); toast(`${ws.length} workshop${ws.length === 1 ? "" : "s"} saved`); await ctx.reload(); }});
+  $("#msAdd", dl).onclick = () => $("#msRows", dl).insertAdjacentHTML("beforeend", row());
+  $("#msRows", dl).addEventListener("click", e => { const b = e.target.closest("[data-rm]"); if (b) b.closest(".ms-drow").remove(); });
 }
 function card(c, r){
   const a = match(c, r), ss = sessionsOf(c, r.session_ids), pending = r.status === "pending";
@@ -209,13 +332,13 @@ function pickDialog(c, ctx, thenOpen){
   }
 }
 // A4 sign for the tables, English and Arabic.
-function printSign(c){
+function printSign(c, url = formUrl(c.conf.id), self = false){
   const style = document.getElementById("pageStyle") || document.head.appendChild(Object.assign(document.createElement("style"), {id: "pageStyle"}));
   style.textContent = "@page{size:210mm 297mm;margin:0}";
   $("#printArea").innerHTML = `<div class="print-page" style="width:210mm;height:297mm;display:grid;justify-items:center;align-content:center;gap:8mm;text-align:center;font-family:'Bricolage Grotesque','Cairo',sans-serif;color:#002a3d;padding:20mm">
     <img src="assets/jv-mark.svg" style="height:15mm" alt=""><div style="font-size:14pt;color:#587080;max-width:160mm">${esc(c.conf.name)}</div>
     <div style="font-size:38pt;font-weight:700;line-height:1.05">Get your<br>workshop certificate</div><div dir="rtl" style="font-family:Cairo,sans-serif;font-size:24pt;font-weight:700">احصل على شهادة ورشة العمل</div>
-    <div style="width:100mm;height:100mm;padding:6mm;border:1.2mm solid #00bdeb;border-radius:8mm">${qrSvg(formUrl(c.conf.id))}</div>
-    <div style="font-size:13pt;color:#587080;max-width:160mm">Scan with your phone camera, type your name and email, and tick your workshops. Your certificate arrives by email once approved.</div></div>`;
+    <div style="width:100mm;height:100mm;padding:6mm;border:1.2mm solid #00bdeb;border-radius:8mm">${qrSvg(url)}</div>
+    <div style="font-size:13pt;color:#587080;max-width:160mm">${self ? "Scan with your phone camera and type the ID on your badge. Confirm your name and your certificate arrives by email in a minute." : "Scan with your phone camera, type your name and email, and tick your workshops. Your certificate arrives by email once approved."}</div>${self ? `<div dir="rtl" style="font-family:Cairo,sans-serif;font-size:13pt;color:#587080">امسح الرمز واكتب رقم بطاقتك، ثم أكّد اسمك لتصلك الشهادة على بريدك.</div>` : ""}</div>`;
   setTimeout(() => print(), 150);
 }

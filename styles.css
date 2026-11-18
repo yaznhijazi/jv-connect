@@ -929,3 +929,31 @@ body[data-role="staff"] #rForm,body[data-role="viewer"] #rForm,body[data-role="v
 .tag-btn{background:none;border:0;padding:0;min-height:0;cursor:pointer}
 .tag-btn .tagc{padding:6px 12px;font-size:13px}
 body[data-role="viewer"] [data-bulk="tag"]{display:none!important}
+
+/* ================= certificate by badge ID ================= */
+.ms-head{display:grid;gap:4px}.ms-head h1{font-size:24px;margin:0}.ms-head .note{margin:0}
+.ms-ar{font-weight:400}
+.ms-code{font-size:28px!important;letter-spacing:.12em;text-align:center;font-variant-numeric:tabular-nums}
+.ms-name{font-size:18px!important;font-weight:600}
+.ms-name[readonly]{background:var(--surface-2,var(--surface));opacity:.85}
+.ms-err{margin:0;color:var(--bad);min-height:1.2em}
+.ms-who{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ms-who .linkish{margin-left:auto}
+.ms-mail{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;overflow-wrap:anywhere}
+.ms-mail .ic{flex:none;color:var(--accent)}
+.ms-ws{border:0;padding:0;margin:0;display:grid;gap:8px}
+.ms-ws legend{font-weight:600;font-size:13px;color:var(--muted);margin-bottom:6px}
+.ms-ws .check{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.ms-ws .check>span:first-of-type{flex:1;min-width:0}
+.ms-ws .check.done{opacity:.75}
+.ms-list{margin:0;padding-left:20px;display:grid;gap:4px}
+.ms-wlist{display:grid;gap:6px}
+.ms-wrow{display:grid;gap:2px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:0}
+.ms-wrow b{overflow-wrap:anywhere}
+.ms-sent summary{cursor:pointer;font-weight:600}
+.ms-slist{display:grid;gap:6px;margin-top:8px;max-height:320px;overflow:auto}
+.ms-srow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.ms-srow>span{flex:1;min-width:0;display:grid}.ms-srow small{color:var(--muted);overflow-wrap:anywhere}
+.ms-drow{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end}
+@media (max-width:640px){.ms-drow{grid-template-columns:1fr 1fr;padding-bottom:10px;border-bottom:1px solid var(--line)}.ms-drow label:first-child{grid-column:1/-1}}
+body[data-role="viewer"] .ms-allow,body[data-role="staff"] #msToggle{display:none!important}
+.ms-locked{display:grid;gap:6px}.ms-locked b{font-size:18px;padding:10px 12px;border-radius:10px;background:var(--surface-2);overflow-wrap:anywhere}
