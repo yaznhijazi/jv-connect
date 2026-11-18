@@ -117,7 +117,7 @@ async function route(){
     if (parts[0] === "voucher" && parts[1]) return await scanPage.renderVoucherPublic(app, parts[1]); // dinner staff, no login
     if (parts[0] === "register" && parts[1]) return await registerPage.renderPublic(app, parts[1]);   // visitors, no login
     if (parts[0] === "cert" && parts[1]) return await certsPage.renderPublic(app, parts[1]);          // certificate requests, no login
-    if (parts[0] === "mycert" && parts[1]) return await certsPage.renderSelf(app, parts[1]);          // workshop certificate by badge ID, no login
+    if (parts[0] === "mycert" && parts[1]) return await certsPage.renderSelf(app, parts[1], decodeURIComponent(parts[2] || ""));          // workshop certificate by badge ID, no login
     if (parts[0] === "badge" && parts[1]) return await registerPage.renderBadge(app, parts[1], parts[2]); // attendee's phone badge, no login
     if (!state.admin) return renderLogin();
     if (!parts.length) return await renderHome();

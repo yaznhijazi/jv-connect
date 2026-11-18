@@ -38,7 +38,10 @@ const clone = o => JSON.parse(JSON.stringify(o));
 // The appreciation certificate (speakers by default): the attendance one with its own wording.
 DEFAULTS.appreciation = {...clone(DEFAULTS.certificate), categories: ["Speaker"], fields: DEFAULTS.certificate.fields.map(f =>
   f.id === "title" ? {...f, text: "Certificate of Appreciation"} : f.id === "body" ? {...f, text: "in recognition of their valuable contribution as a speaker at"} : {...f})};
-export const KINDS = [["badge", "Badge"], ["certificate", "Attendance certificate"], ["appreciation", "Appreciation certificate"]];
+// Workshop certificates: one design, the workshop name changes per page.
+DEFAULTS.workshop = {...clone(DEFAULTS.certificate), fields: DEFAULTS.certificate.fields.map(f => f.id === "body" ? {...f, text: "has attended the workshop entitled"} : {...f})};
+export const KINDS = [["badge", "Badge"], ["certificate", "Attendance certificate"], ["appreciation", "Appreciation certificate"], ["workshop", "Workshop certificate"]];
+export const workshopsOf = c => c.conf.cert_self?.workshops || [];
 // Which certificate someone gets: appreciation if that layout is set up and covers their category, else attendance.
 export function certKind(c, a){
   const ap = c.layouts.find(l => l.kind === "appreciation")?.layout;
@@ -211,14 +214,16 @@ function placeOnDesign(L, kind, band){
 }
 
 /* ---------- designer: a Print tab for everyday use, an Edit layout tab for setting the page up ---------- */
-const ui = {kind: "badge", tab: "print", sel: "name", grid: true, sample: null, L: null, dirty: false, full: {}};
+const ui = {kind: "badge", tab: "print", sel: "name", grid: true, sample: null, L: null, dirty: false, full: {}, ws: ""};
 export function render(el, c, ctx){
   if (!can("manage")) ui.tab = "print"; // only owners and admins edit layouts
   printFonts(); // the preview uses the real faces; they swap in once loaded
   if (!ui.L || ui.L.__conf !== c.conf.id || ui.L.__kind !== ui.kind) { ui.L = layoutFor(c, ui.kind); ui.L.__conf = c.conf.id; ui.L.__kind = ui.kind; ui.dirty = false; }
   const L = ui.L, edit = ui.tab === "edit", noun = ui.kind === "badge" ? "badge" : "certificate";
   const full = L.bg ? (ui.full[ui.kind] ?? L.printBg ?? true) : false;
-  const sample = c.attendees.find(a => a.id === ui.sample) || c.attendees[0] || {code: "0427", full_name: "Lina Haddad", cert_name: "Dr. Lina Haddad", category: "Speaker", entity: "Jordan University Hospital", country: "Jordan", phone: "", email: ""};
+  const wsList = workshopsOf(c), ws = ui.kind === "workshop" ? (wsList.find(w => w.id === ui.ws) || wsList[0]) : null;
+  const withWs = a => ws ? {...a, session_title: ws.title, session_day: ws.day} : ui.kind === "workshop" ? {...a, session_title: "Workshop title", session_day: ""} : a;
+  const sample = withWs(c.attendees.find(a => a.id === ui.sample) || c.attendees[0] || {code: "0427", full_name: "Lina Haddad", cert_name: "Dr. Lina Haddad", category: "Speaker", entity: "Jordan University Hospital", country: "Jordan", phone: "", email: ""});
   if (!L.fields.some(f => f.id === ui.sel)) ui.sel = L.fields[0]?.id;
   const f = L.fields.find(x => x.id === ui.sel);
   const sizeName = Object.entries(SIZES).find(([, [w, h]]) => w === L.w && h === L.h)?.[0] || "Custom";
@@ -229,6 +234,8 @@ export function render(el, c, ctx){
         <label class="mode"><input type="radio" name="pMode" value="full" ${full ? "checked" : ""}><b>Full design</b><span>The design and the names, on blank paper or card.</span></label>
         <label class="mode"><input type="radio" name="pMode" value="text" ${full ? "" : "checked"}><b>Text only</b><span>Just the names, for ${noun}s that already have the design printed on them.</span></label></div>`
       : `<p class="note" style="margin:0">No design yet, so only the text prints. To print on your designer's artwork, add their PDF in <button type="button" class="linkish" data-tab="edit">Edit layout</button>.</p>`}
+      ${ui.kind === "workshop" ? (wsList.length ? `<label>Workshop<select id="pWs">${wsList.map(w => `<option value="${esc(w.id)}" ${w === ws ? "selected" : ""}>${esc(w.title)}</option>`).join("")}</select></label>`
+        : `<p class="note" style="margin:0">Add your workshops on the Certificates page (Certificate by badge ID) to print a certificate per workshop.</p>`) : ""}
       <label>Who<select id="pWho"><option value="all">Everyone (${c.attendees.length})</option>${cats.map(k => `<option value="cat:${esc(k)}">${esc(k)} (${nCat(k)})</option>`).join("")}
         ${tagsUsed(c).map(t => `<option value="tag:${esc(t)}">Tagged “${esc(t)}” (${c.attendees.filter(a => (a.tags || []).includes(t)).length})</option>`).join("")}
         <option value="attended">Attended at least one session (${c.attendees.filter(a => c.checkinsByCode.has(a.code)).length})</option>
@@ -336,11 +343,12 @@ export function render(el, c, ctx){
       if (who === "attended") people = people.filter(a => c.checkinsByCode.has(a.code));
       if (who === "new") people = people.filter(a => !a.badge_printed_at);
       if (who === "ids") { const want = parseIds($("#pIds").value); people = people.filter(a => want(a.code)); }
-      return people.slice().sort((a, b) => a.code.localeCompare(b.code, undefined, {numeric: true}));
+      return people.slice().sort((a, b) => a.code.localeCompare(b.code, undefined, {numeric: true})).map(withWs);
     };
     const count = () => { const n = pick().length, up = perSheet(L).n, sheet = $("#pSheet")?.value === "a4" && up > 1;
       $("#pPrint").textContent = `Print ${n} ${noun}${n === 1 ? "" : "s"}${L.bg ? (full ? ", full design" : ", text only") : ""}${sheet ? `, ${Math.ceil(n / up)} A4 sheet${Math.ceil(n / up) === 1 ? "" : "s"}` : ""}`;
       $("#pPrint").disabled = !n; $("#pPdf").disabled = !n; };
+    $("#pWs") && ($("#pWs").onchange = e => { ui.ws = e.target.value; rerender(); });
     $("#pWho").onchange = e => { $("#pIds").hidden = e.target.value !== "ids"; count(); };
     $("#pIds").oninput = count; $("#pSheet") && ($("#pSheet").onchange = count); count();
     $("#pPrint").onclick = () => withUnsaved(() => printDocs(c, ui.kind, pick(), {sheet: $("#pSheet")?.value === "a4", exact: true, full}));
