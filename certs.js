@@ -77,7 +77,7 @@ export async function renderSelf(app, confId, startCode = ""){
 
   // Step 2: name (unless locked) and email (only if we have none).
   const confirm = (p, msg = "", draft = {}) => {
-    const todo = p.items.filter(w => !w.sent_at);
+    p = {...p, locked: false}; const todo = p.items; // sending again is allowed, and the name can always be corrected
     pg.innerHTML = head + `<form class="panel form" id="msOk" novalidate><div class="ms-who"><span class="pill acc">${esc(p.code)}</span><span class="note">${esc(p.category || "")}</span>
         <button type="button" class="linkish" id="msBack">Not you?</button></div>
       ${p.locked ? `<div class="ms-locked"><span class="note">${L("Name on the certificate", "الاسم على الشهادة")}</span><b dir="auto">${esc(p.name)}</b><input type="hidden" name="name" value="${esc(p.name)}"></div>
@@ -105,7 +105,7 @@ export async function renderSelf(app, confId, startCode = ""){
     pg.innerHTML = head + `<div class="panel form ms-check"><h2>${L("Is your name right?", "هل اسمك صحيح؟")}</h2>
       <p class="note" style="margin:0">Your certificate${todo.length > 1 ? "s" : ""} will show:</p>
       <div class="ms-big" dir="auto">${esc(name)}</div>
-      <p class="note" style="margin:0">${p.locked ? "" : "After sending, the name can't be changed. "}They go to <b>${esc(email || p.email_hint)}</b>:</p>
+      <p class="note" style="margin:0">They go to <b>${esc(email || p.email_hint)}</b>:</p>
       <ul class="ms-list">${todo.map(w => `<li>${esc(w.title)}</li>`).join("")}</ul>
       <button type="button" class="big-btn" id="msSend">Yes, email my certificate${todo.length > 1 ? "s" : ""} <span dir="rtl">نعم، أرسل</span></button>
       ${p.locked ? "" : `<button type="button" class="ghost" id="msEdit">Edit the name <span dir="rtl">تعديل الاسم</span></button>`}
@@ -215,7 +215,7 @@ function selfPanel(c){
   const cs = selfOf(c), sent = sentList(c), title = id => cs.workshops.find(w => w.id === id)?.title || "Removed workshop";
   const count = w => c.attendees.filter(a => (a.tags || []).includes(w.tag)).length;
   return `<section class="panel form" id="msPanel"><div class="panel-head" style="margin:0"><h2>Certificate by badge ID</h2><span class="pill ${cs.open ? "ok live" : ""}">${cs.open ? "Open" : "Closed"}</span></div>
-    <p class="note" style="margin:0">People scan the QR, type their badge ID, confirm their name, add an email if we don't have one, and get all their workshop certificates by email. Each workshop is sent once, and the name is locked after the first.</p>
+    <p class="note" style="margin:0">People scan the QR, type their badge ID, confirm their name, add an email if we don't have one, and get all their workshop certificates by email. They can send them again at any time.</p>
     <div class="ms-wlist">${cs.workshops.map(w => `<div class="ms-wrow"><b>${esc(w.title)}</b><span class="note">${w.day ? esc(dayShort(w.day)) + ", " : ""}${count(w)} tagged ${esc(w.tag)}</span></div>`).join("")
       || `<p class="note" style="margin:0">No workshops yet. Add one and pick the tag of the people who attended it.</p>`}</div>
     ${cs.workshops.length ? `<div class="codes" style="justify-content:center"><div style="width:150px;height:150px">${qrSvg(selfUrl(c.conf.id))}</div></div>
