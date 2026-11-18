@@ -49,7 +49,7 @@ export function render(el, c, ctx){
     <div class="att-meta"><span>${list.length === c.attendees.length ? `${c.attendees.length} attendee${c.attendees.length === 1 ? "" : "s"}` : `${list.length} of ${c.attendees.length} shown`}</span>
       ${narrowed ? `<button type="button" class="linkish" id="aClear">Clear filters</button>` : ""}</div>
     ${sel.length ? `<div class="bulkbar"><span>${sel.length} selected</span><span style="flex:1"></span>
-      <button type="button" class="ghost small" data-bulk="badge">${icon("print")}Badges</button><button type="button" class="ghost small" data-bulk="certificate">${icon("print")}Certificates</button>
+      <button type="button" class="ghost small" data-bulk="badge">${icon("print")}Badges</button><button type="button" class="ghost small" data-bulk="badgetext" title="Only the names, for cards that already have the design">${icon("print")}Badges, text only</button><button type="button" class="ghost small" data-bulk="certificate">${icon("print")}Certificates</button>
       <button type="button" class="ghost small" data-bulk="tag">${icon("tag")}Tag</button><button type="button" class="ghost small" data-bulk="paid">Mark paid</button><button type="button" class="ghost small" data-bulk="unpaid">Mark not paid</button>
       <button type="button" class="danger small" data-bulk="delete">Delete</button><button type="button" class="ghost small" data-bulk="clear" aria-label="Clear selection">${icon("x")}</button></div>` : ""}
     <div class="tbl"><table class="rt att"><thead><tr><th class="sel"><input type="checkbox" id="aAll" aria-label="Select all shown" ${list.length && list.every(a => view.sel.has(a.id)) ? "checked" : ""}></th>
@@ -96,6 +96,7 @@ export function render(el, c, ctx){
     const k = b.dataset.bulk, ids = sel.map(a => a.id);
     if (k === "clear") { view.sel.clear(); return rerender(); }
     if (k === "badge" || k === "certificate") return printDocs(c, k, sel);
+    if (k === "badgetext") return printDocs(c, "badge", sel, {full: false}); // pre-printed cards: no design, just the text
     if (k === "tag") return tagDialog(c, sel, ctx);
     if (k === "paid" || k === "unpaid") { const { error } = await SB.from("attendees").update({fee_paid: k === "paid"}).in("id", ids); if (error) return toast(error.message, "bad"); toast(`${ids.length} marked ${k === "paid" ? "paid" : "not paid"}`); return ctx.reload(); }
     if (k === "delete") return armed(b, async () => { const { error } = await SB.from("attendees").delete().in("id", ids); if (error) return toast(error.message, "bad"); view.sel.clear(); toast(`${ids.length} deleted`); ctx.reload(); });
