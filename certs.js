@@ -113,17 +113,15 @@ export async function renderSelf(app, confId, startCode = ""){
     $("#msEdit") && ($("#msEdit").onclick = () => confirm(p, "", {name, email}));
     $("#msSend").onclick = async () => {
       const err = $(".ms-err"), btns = $$(".ms-check button"); btns.forEach(b => b.disabled = true); err.style.color = "";
-      const sent = []; let hint = p.email_hint;
-      for (const [i, w] of todo.entries()) {
-        err.textContent = `Making certificate ${i + 1} of ${todo.length}…`;
-        const pdf = await b64(await certPdf(c, [{code: p.code, category: p.category, full_name: name, cert_name: name, session_title: w.title, session_day: w.day}], {kind: "workshop"}));
-        err.textContent = `Sending ${i + 1} of ${todo.length}…`;
-        const { data, error } = await SB.functions.invoke("cert-self", {body: {conf: confId, code: p.code, workshop: w.id, name, email, pdf}});
-        if (error || !data?.ok) { const m = error ? await errText(error) : "Not sent.";
-          const { data: q } = await SB.rpc("c_cert_self_lookup", {p_conf: confId, p_code: p.code});
-          return confirm(q?.found ? q : p, sent.length ? `Sent: ${sent.join(", ")}. ${m}` : m, {name, email}); }
-        sent.push(w.title); hint = data.email_hint;
-      }
+      // One email: one PDF with a page per workshop.
+      err.textContent = `Making your certificate${todo.length > 1 ? "s" : ""}…`;
+      const pdf = await b64(await certPdf(c, todo.map(w => ({code: p.code, category: p.category, full_name: name, cert_name: name, session_title: w.title, session_day: w.day})), {kind: "workshop"}));
+      err.textContent = "Sending…";
+      const { data, error } = await SB.functions.invoke("cert-self", {body: {conf: confId, code: p.code, workshops: todo.map(w => w.id), name, email, pdf}});
+      if (error || !data?.ok) { const m = error ? await errText(error) : "Not sent.";
+        const { data: q } = await SB.rpc("c_cert_self_lookup", {p_conf: confId, p_code: p.code});
+        return confirm(q?.found ? q : p, m, {name, email}); }
+      const sent = todo.map(w => w.title), hint = data.email_hint;
       pg.innerHTML = head + `<div class="panel reg-done"><span class="pill ok">Sent</span><h2 dir="auto">${esc(name)}</h2>
         <p style="margin:0">Your certificate${sent.length > 1 ? "s are" : " is"} on the way to <b>${esc(hint)}</b>:</p><ul class="ms-list">${sent.map(t => `<li>${esc(t)}</li>`).join("")}</ul>
         <p class="note" dir="rtl" style="margin:0">تم إرسال الشهادات إلى بريدك الإلكتروني.</p><p class="note" style="margin:0">Not in your inbox in a few minutes? Check the spam or junk folder.</p>

@@ -1,7 +1,7 @@
 // Attendees: search, filter, add / edit / remove, import from Excel or CSV, badges and certificates.
 import {SB, $, $$, esc, hm, dayShort, t5, money, initials, toast, dialog, armed, formData, downloadCsv, slug, loadScript, qrSvg, barcodeSvg, hallName,
   categoriesOf, countriesOf, selectOptions, today, startOf, endOf, state, icon, flag, countryPicker, can, store, tagsOf, tagsUsed, tagChip, cleanTag} from "./core.js";
-import {printDocs, certPdf, certKind} from "./print.js";
+import {printDocs, certPdf, certKind, workshopsOf} from "./print.js";
 import {badgeUrl} from "./register.js";
 import {formOf, questionInput, answersFrom} from "./regform.js";
 
@@ -203,7 +203,7 @@ function personDialog(c, a, ctx){
     body: `${a ? `<div class="p-head"><span class="av lg">${esc(initials(a.full_name))}</span><div style="min-width:0"><b>${esc(a.full_name)}</b>
         <div class="p-tags"><span class="pill acc num">ID ${esc(a.code)}</span>${a.category ? `<span class="pill">${esc(a.category)}</span>` : ""}
         ${Number(a.fee_amount) ? `<span class="pill ${a.fee_paid ? "ok" : "warn"}">${a.fee_paid ? "Paid" : "Not paid"} ${money(a.fee_amount)} JOD</span>` : ""}</div></div></div>
-      <div class="p-actions"><button type="button" class="ghost small" data-print="badge">${icon("print")}Badge</button><button type="button" class="ghost small" data-print="certificate">${icon("print")}Certificate</button><button type="button" class="ghost small" data-pdf="badge">${icon("download")}Badge PDF</button><button type="button" class="ghost small" data-pdf="certificate">${icon("download")}Certificate PDF</button>
+      <div class="p-actions"><button type="button" class="ghost small" data-print="badge">${icon("print")}Badge</button><button type="button" class="ghost small" data-print="certificate">${icon("print")}Certificate</button><button type="button" class="ghost small" data-pdf="badge">${icon("download")}Badge PDF</button><button type="button" class="ghost small" data-pdf="certificate">${icon("download")}Certificate PDF</button>${wsFor(c, a).length ? `<button type="button" class="ghost small" data-wspdf>${icon("download")}Workshop certificate${wsFor(c, a).length > 1 ? "s" : ""} PDF</button>` : ""}
         ${Number(a.fee_amount) ? `<button type="button" class="ghost small" data-paytoggle>${icon("money")}${a.fee_paid ? "Mark not paid" : "Mark paid"}</button>` : ""}</div>
       ${pickable.length ? `<div class="p-checkin"><select id="pSess" aria-label="Session">${pickable.slice(0, 60).map(s => `<option value="${s.id}">${rank(s) === 0 ? "Live: " : ""}${esc(dayShort(s.day))} ${t5(s.start_time)}, ${esc(s.title)}</option>`).join("")}</select>
         <button type="button" class="soft small" id="pCheck">${icon("check")}Check in</button></div>` : ""}` : ""}
@@ -257,6 +257,17 @@ function personDialog(c, a, ctx){
       const url = URL.createObjectURL(await certPdf(c, [{...a, cert_name: a.cert_name || a.full_name}], badge ? {kind: "badge"} : {}));
       const what = badge ? `Badge ${a.code}` : certKind(c, a) === "appreciation" ? "Certificate of Appreciation" : "Certificate of Attendance";
       Object.assign(document.createElement("a"), {href: url, download: `${what} - ${a.cert_name || a.full_name}.pdf`}).click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch (err) { toast(err.message || "The PDF couldn't be made.", "bad"); }
+    b.disabled = false;
+  });
+  // Workshop certificates: one page per workshop this person is tagged for, in the workshop design.
+  $$("[data-wspdf]", d).forEach(b => b.onclick = async () => {
+    b.disabled = true; toast("Making the PDF…");
+    try {
+      const name = a.cert_name || a.full_name;
+      const url = URL.createObjectURL(await certPdf(c, wsFor(c, a).map(w => ({...a, cert_name: name, session_title: w.title, session_day: w.day})), {kind: "workshop"}));
+      Object.assign(document.createElement("a"), {href: url, download: `Workshop certificates - ${name}.pdf`}).click();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     } catch (err) { toast(err.message || "The PDF couldn't be made.", "bad"); }
     b.disabled = false;
@@ -368,3 +379,4 @@ async function importDialog(c, ctx){
     } catch (err) { $("#impPrev", d).innerHTML = `<p style="color:var(--bad);font-weight:700">${esc(err.message || err)}</p>`; }
   };
 }
+const wsFor = (c, a) => workshopsOf(c).filter(w => (a?.tags || []).includes(w.tag));
