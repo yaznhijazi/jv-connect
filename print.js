@@ -73,7 +73,7 @@ export function printFonts(){
 const H2C = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js", JSPDF = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
 // people: [{...attendee fields, cert_name, session_title, session_day}], one page each.
 // Any layout as a PDF file. kind: "badge", "certificate" (workshop emails), "appreciation", or omitted to pick a certificate per person.
-export async function certPdf(c, people, {kind = "", onPage = null} = {}){
+export async function certPdf(c, people, {kind = "", onPage = null, onCanvas = null} = {}){
   await Promise.all([loadScript(H2C), loadScript(JSPDF), printFonts()]); await document.fonts.ready;
   const Lof = a => layoutFor(c, kind || certKind(c, a)), L0 = Lof(people[0]);
   const host = Object.assign(document.createElement("div"), {style: "position:fixed;left:-10000px;top:0"}); document.body.appendChild(host);
@@ -85,6 +85,7 @@ export async function certPdf(c, people, {kind = "", onPage = null} = {}){
       host.innerHTML = `<div class="paper" style="width:${L.w}mm;height:${L.h}mm;${L.bg ? `background:#fff url('${L.bg}') center/100% 100% no-repeat;` : ""}">${L.fields.map(f => fieldHtml(f, a, c)).join("")}</div>`;
       fitText(host);
       const cv = await window.html2canvas(host.firstChild, {scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false});
+      onCanvas?.(cv, i);
       if (i) doc.addPage([L.w, L.h], land ? "landscape" : "portrait");
       doc.addImage(cv.toDataURL("image/jpeg", .9), "JPEG", 0, 0, L.w, L.h);
     }

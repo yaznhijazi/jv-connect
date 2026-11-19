@@ -124,6 +124,7 @@ async function route(){
     if (parts[0] === "mycert" && parts[1]) return await certsPage.renderSelf(app, parts[1], decodeURIComponent(parts[2] || ""));          // workshop certificate by badge ID, no login
     if (parts[0] === "edit" && parts[1]) return await certsPage.renderEdit(app, parts[1], decodeURIComponent(parts[2] || ""));          // fix certificate name or email by badge ID, no login
     if (parts[0] === "badge" && parts[1]) return await registerPage.renderBadge(app, parts[1], parts[2]); // attendee's phone badge, no login
+    if (parts[0] === "mycertificate" && parts[1]) { island.stop(); return await kiosk.renderKiosk(app, parts[1], "digital"); } // certificate on the phone, no login
     if (parts[0] === "printcert" && parts[1]) { island.stop(); return await kiosk.renderKiosk(app, parts[1]); } // self-print certificates, no login
     if (!state.admin) return renderLogin();
     if (parts[0] === "station" && parts[1]) { island.stop(); return await kiosk.renderStation(app, parts[1]); }  // a printer laptop, team login

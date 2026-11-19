@@ -1214,3 +1214,33 @@ button.ks-q{padding-inline-end:72px}
 
 .nw-steps{margin:0;padding-inline-start:20px;display:grid;gap:10px}
 .nw-steps .linkbox{margin-top:8px}
+
+/* digital certificate: the certificate on screen */
+.ks-digital{gap:16px}
+.ks-cert{width:100%;aspect-ratio:297/210;border-radius:14px;overflow:hidden;background:var(--surface-2);box-shadow:0 18px 40px -20px rgba(0,42,61,.45),0 0 0 1px var(--line);display:grid;place-items:center}
+.ks-cert img{width:100%;height:100%;object-fit:cover;display:block;animation:ks-rise .5s ease}
+.ks-cert-wait{display:grid;gap:8px;justify-items:center;color:var(--muted)}
+.ks-cert-wait .ic{animation:ks-pulse 1.2s ease-in-out infinite}
+@keyframes ks-rise{from{opacity:0;transform:translateY(8px) scale(.98)}}
+.ks-acts{display:grid;grid-template-columns:1.3fr 1fr;gap:10px;width:100%}
+.ks-acts .ks-go{min-height:60px;font-size:17px}
+.ks-acts .ks-b{min-height:60px}
+@media (max-width:520px){.ks-acts{grid-template-columns:1fr}}
+.ksp-dig{display:grid;gap:8px;padding:12px;border-radius:var(--r);background:var(--surface-2);border:1px solid var(--line)}
+.ksp-dig>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:8px}
+
+/* name check: the registered name next to the typed one */
+.ks-review>.ic{width:44px;height:44px;color:var(--warn)}
+.ks-names{display:grid;gap:8px;width:100%}
+.ks-names>div{display:grid;gap:2px;padding:12px 16px;border-radius:16px;background:var(--surface-2);border:1px solid var(--line);text-align:start}
+.ks-names>div.new{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+.ks-names small{font-size:12px;color:var(--muted)}
+.ks-names b{font:700 20px/1.25 var(--display);overflow-wrap:anywhere}
+
+/* kiosk: say what to check, and offer the fix plainly */
+.ks-ask{margin:0;display:flex;gap:8px;align-items:flex-start;font-size:15px;font-weight:600;color:var(--fg);line-height:1.4}
+.ks-ask .ic{flex:none;margin-top:2px;color:var(--accent)}
+.ks-ask.warn{padding:12px 14px;border-radius:14px;background:var(--warn-bg);color:var(--warn)}
+.ks-ask.warn .ic{color:var(--warn)}
+.ks-fix{justify-self:stretch;margin-top:-6px;min-height:48px;border-radius:14px;border:1.5px dashed var(--line-2);background:transparent;color:var(--accent);font-size:15px;font-weight:600}
+.ks-fix:hover{border-color:var(--sky);background:var(--accent-soft)}
