@@ -1,10 +1,11 @@
 // Attendees: search, filter, add / edit / remove, import from Excel or CSV, badges and certificates.
 import {SB, $, $$, esc, hm, dayShort, t5, money, initials, toast, dialog, armed, formData, downloadCsv, slug, loadScript, qrSvg, barcodeSvg, hallName,
-  categoriesOf, countriesOf, selectOptions, today, startOf, endOf, state, icon, flag, countryPicker, can, store, tagsOf, tagsUsed, tagChip, cleanTag} from "./core.js";
+  categoriesOf, countriesOf, selectOptions, today, startOf, endOf, state, icon, flag, countryPicker, can, store, tagsOf, tagsUsed, tagChip, cleanTag, loadConf} from "./core.js";
 import {printDocs, certPdf, certKind, workshopsOf} from "./print.js";
 import {badgeUrl} from "./register.js";
 import {formOf, questionInput, answersFrom} from "./regform.js";
 
+let syncT = null;
 export const view = {q: "", category: "", country: "", tag: "", pay: "", sort: store.get("attSort") || "id", show: 200, sel: new Set()}; // ID order by default; the last choice is remembered
 const FIELDS = [["code", "Main ID"], ["full_name", "Full name"], ["cert_name", "Name on certificate"], ["phone", "Phone"], ["email", "Email"],
   ["category", "Category"], ["entity", "Entity"], ["country", "Country"], ["fee_amount", "Fee (JOD)"], ["fee_paid", "Paid"], ["fee_note", "Fee note"]];
@@ -69,6 +70,23 @@ export function render(el, c, ctx){
     ${list.length > view.show ? `<div style="text-align:center;margin-top:12px"><button type="button" class="ghost" id="aMore">Show ${Math.min(200, list.length - view.show)} more</button></div>` : ""}</div>`;
 
   const rerender = () => render(el, c, ctx);
+  // Live list: when someone else on the team adds or removes a person, the list (and the search) picks it up within seconds.
+  // Only a count and the newest row are checked; the full reload happens only when they change. Typing in the search box is kept.
+  clearInterval(syncT); const n0 = c.attendees.length, last0 = c.attendees.reduce((m, a) => a.created_at > m ? a.created_at : m, "");
+  syncT = setInterval(async () => {
+    if (!document.contains(el)) return clearInterval(syncT);
+    if (document.visibilityState !== "visible" || $("dialog[open]")) return;
+    const [{ count }, { data: top }] = await Promise.all([SB.from("attendees").select("id", {count: "exact", head: true}).eq("conference_id", c.conf.id),
+      SB.from("attendees").select("created_at").eq("conference_id", c.conf.id).order("created_at", {ascending: false}).limit(1)]);
+    if (count == null || (count === n0 && (top?.[0]?.created_at || "") <= last0) || !document.contains(el)) return;
+    clearInterval(syncT);
+    const box = $("#aQ"), typing = document.activeElement === box, pos = typing ? [box.selectionStart, box.selectionEnd] : null, y = scrollY;
+    if (box) view.q = box.value;
+    const fresh = await loadConf(c.conf.id, {force: true});
+    if (!document.contains(el) || $("dialog[open]")) return;
+    render(el, fresh, ctx); scrollTo(0, y);
+    if (pos) { $("#aQ").focus(); $("#aQ").setSelectionRange(...pos); }
+  }, 8000);
   let qT; $("#aQ").oninput = e => { clearTimeout(qT); qT = setTimeout(() => { view.q = e.target.value; view.show = 200; rerender(); $("#aQ").focus(); $("#aQ").setSelectionRange(9999, 9999); }, 200); };
   $("#aCat").onchange = e => { view.category = e.target.value; rerender(); };
   $("#aCountry").onchange = e => { view.country = e.target.value; rerender(); };
