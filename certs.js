@@ -227,6 +227,18 @@ export async function emailMain(c, a){
   await SB.from("attendees").update({cert_sent: sent}).eq("id", a.id); a.cert_sent = sent;
   return {};
 }
+// Every workshop certificate a person is tagged for, as one email with a page per workshop. Sending again is allowed.
+export async function emailWorkshops(c, a){
+  const ws = selfOf(c).workshops.filter(w => (a.tags || []).includes(w.tag));
+  if (!ws.length) return {error: "They aren't tagged for a workshop."};
+  const person = {...a, cert_name: a.cert_name || a.full_name, email: clean(a.email).toLowerCase()};
+  const err = await send(c, person, ws, "workshop");
+  if (err) return {error: err};
+  const at = new Date().toISOString(), sent = {...(a.cert_sent || {})};
+  ws.forEach(w => { sent[w.id] = {at, email: person.email, name: person.cert_name}; });
+  await SB.from("attendees").update({cert_sent: sent}).eq("id", a.id); a.cert_sent = sent;
+  return {count: ws.length};
+}
 // One at a time, so a long list never trips Gmail; stops at Gmail's daily limit or when stop() says so.
 export async function emailMany(c, people, {onStep, stop} = {}){
   let ok = 0; const bad = [];
