@@ -69,17 +69,51 @@ const MIC = `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12
 let rec = null, listening = false;
 const lang = () => { try { return localStorage.getItem(LANG_KEY) || "ar-JO"; } catch { return "ar-JO"; } };
 
-export const button = () => `<button type="button" class="vc-fab" id="vcFab" aria-label="Voice: print a badge or certificate" title="Voice: print a badge or certificate">${MIC}</button>`;
+// Jovy, the robot on the button. The picture has a blank face screen; the face is drawn here in SVG so the eyes
+// can follow the pointer and the expression can show what's happening (listening, printed, not found).
+const FACES = {
+  idle: `<g class="jd-eyes"><ellipse cx="30" cy="38" rx="6" ry="10"/><ellipse cx="70" cy="38" rx="6" ry="10"/></g><path d="M41 61 Q50 69 59 61"/>`,
+  listen: `<g class="jd-eyes"><ellipse cx="30" cy="37" rx="7.5" ry="12"/><ellipse cx="70" cy="37" rx="7.5" ry="12"/></g><circle cx="50" cy="64" r="3.6"/>`,
+  happy: `<path d="M22 42 Q30 28 38 42M62 42 Q70 28 78 42"/><path d="M38 58 Q50 72 62 58"/>`,
+  oops: `<g class="jd-eyes"><ellipse cx="31" cy="41" rx="5" ry="7"/><ellipse cx="69" cy="41" rx="5" ry="7"/></g><path d="M42 65 Q50 61 58 65"/>`,
+  wink: `<g class="jd-eyes"><ellipse cx="30" cy="38" rx="6" ry="10"/></g><path d="M63 40 Q70 31 77 40"/><path d="M41 61 Q50 69 59 61"/>`,
+};
+let faceT = 0, held = "idle";
+// Show a face for ms, or until another call; a held face (listening) comes back after a short one.
+function mood(face, ms = 0){
+  const f = $("#vcFace"); if (!f) return;
+  clearTimeout(faceT); if (!ms) held = face || "idle";
+  f.innerHTML = FACES[face || held]; f.dataset.face = face || held;
+  if (ms) faceT = setTimeout(() => mood(held), ms);
+}
+export const button = () => `<button type="button" class="vc-fab" id="vcFab" aria-label="Jovy, voice printing: print a badge or certificate" title="Jovy: say or type what to print">
+  <span class="vc-bot" id="vcBot"><img src="assets/mascots/jovy.webp" alt="" draggable="false">
+  <svg class="jd-face" id="vcFace" viewBox="0 0 100 80" aria-hidden="true">${FACES.idle}</svg></span></button>`;
 
+let watching = false;
 export function wire(){
   const fab = $("#vcFab"); if (!fab) return;
-  fab.onclick = () => $("#vc") ? close() : open(true);
+  held = "idle";
+  fab.onclick = () => { if (!matchMedia("(prefers-reduced-motion: reduce)").matches) $("#vcBot")?.animate(
+      [{transform: "scale(1,1)"}, {transform: "scale(1.1,.86)", offset: .18}, {transform: "scale(.95,1.08)", offset: .45}, {transform: "scale(1,1)"}], {duration: 420});
+    $("#vc") ? close() : open(true); };
+  if (watching) return;
+  watching = true;
+  // The eyes lean toward the pointer, a few units at most, so the face stays on its screen.
+  addEventListener("pointermove", e => {
+    const f = $("#vcFace"), b = $("#vcFab"); if (!f || !b) return;
+    const r = b.getBoundingClientRect(), dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2), d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 260);
+    f.style.setProperty("--jx", (dx / d * 6 * k).toFixed(2)); f.style.setProperty("--jy", (dy / d * 4 * k).toFixed(2));
+  }, {passive: true});
+  // Blink now and then.
+  setInterval(() => { const f = $("#vcFace"); if (!f || document.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    f.classList.add("blink"); setTimeout(() => f.classList.remove("blink"), 140); }, 4200);
 }
 
 function open(listen){
   close();
   document.body.insertAdjacentHTML("beforeend", `<div class="vc" id="vc" role="dialog" aria-label="Voice printing">
-    <div class="vc-top"><span class="vc-t">Say or type what to print</span>
+    <div class="vc-top"><span class="vc-t">Jovy · say or type what to print</span>
       ${SR ? `<button type="button" class="vc-lang" id="vcLang" title="Language you speak">${lang() === "ar-JO" ? "عربي" : "EN"}</button>` : ""}
       <button type="button" class="vc-x" id="vcX" aria-label="Close">✕</button></div>
     <div class="vc-say" id="vcSay" dir="auto"><span class="vc-hint">"اطبع باجة محمد"<br>"شهادة رقم 3725"<br>"print badge 4012 text only"</span></div>
@@ -94,22 +128,23 @@ function open(listen){
   if (listen && SR) hear(); else $("#vcIn").focus();
 }
 const esc_ = e => { if (e.key === "Escape" && $("#vc")) { e.stopPropagation(); close(); } };
-function close(){ rec?.abort(); listening = false; $("#vc")?.remove(); $("#vcFab")?.classList.remove("on"); document.removeEventListener("keydown", esc_, true); }
+function close(){ rec?.abort(); listening = false; $("#vc")?.remove(); $("#vcFab")?.classList.remove("on"); mood("idle"); document.removeEventListener("keydown", esc_, true); }
 
 function hear(){
   rec?.abort(); rec = new SR(); rec.lang = lang(); rec.interimResults = true; rec.maxAlternatives = 5;
-  const box = $("#vc"); listening = true; box?.classList.add("listening"); $("#vcFab")?.classList.add("on"); say("", "");
+  const box = $("#vc"); listening = true; box?.classList.add("listening"); $("#vcFab")?.classList.add("on"); mood("listen"); say("", "");
   $("#vcSay").innerHTML = `<span class="vc-hint">${lang() === "ar-JO" ? "أسمعك…" : "Listening…"}</span>`;
   rec.onresult = e => { const r = e.results[e.results.length - 1]; $("#vcSay").textContent = r[0].transcript;
     if (r.isFinal) run([...r].map(x => x.transcript)); };
   rec.onerror = e => { if (e.error === "no-speech") say("I didn't hear anything. Tap the mic and speak.", "bad");
     else if (e.error === "not-allowed") say("The microphone is blocked. Allow it from the lock icon in the address bar, or type the command.", "bad");
     else if (e.error !== "aborted") say("Voice isn't working here. Type the command instead.", "bad"); };
-  rec.onend = () => { listening = false; $("#vc")?.classList.remove("listening"); $("#vcFab")?.classList.remove("on"); };
+  rec.onend = () => { listening = false; $("#vc")?.classList.remove("listening"); $("#vcFab")?.classList.remove("on"); held = "idle"; if ($("#vcFace")?.dataset.face === "listen") mood("idle"); };
   rec.start();
 }
 
-function say(html, tone){ const o = $("#vcOut"); if (o) { o.className = `vc-out ${tone || ""}`; o.innerHTML = html; } }
+function say(html, tone){ const o = $("#vcOut"); if (o) { o.className = `vc-out ${tone || ""}`; o.innerHTML = html; }
+  if (tone === "ok") mood("happy", 2000); else if (tone === "bad") mood("oops", 2000); }
 
 // Try each way the browser heard it until one finds somebody.
 function run(heard){
@@ -129,6 +164,7 @@ function run(heard){
 function choose(c, kind, list, full, total){
   say(`<p class="vc-q">${total > list.length ? `${total} people match. The closest:` : "Which one?"}</p>${list.map(a => `<button type="button" class="vc-p" data-vp="${a.id}">
       <span class="vc-id num">${esc(a.code)}</span><span dir="auto"><b>${esc(a.full_name)}</b>${a.category ? `<small>${esc(a.category)}</small>` : ""}</span></button>`).join("")}`);
+  mood("wink", 1400);
   $$("[data-vp]").forEach(b => b.onclick = () => go(c, kind, c.attendees.find(a => a.id === b.dataset.vp), full));
 }
 
