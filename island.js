@@ -1,7 +1,7 @@
 // Island: a pill at the top of every conference page. When someone registers from the desk QR, or sends a fix for their
 // certificate name or email, it opens on its own with the details and the actions, so the desk never leaves the page it is on.
 // Two looks: navy for a new registration, plum for a detail change.
-import {SB, $, esc, state, can, icon, flag, armed, toast} from "./core.js";
+import {SB, $, esc, state, can, icon, flag, toast, initials} from "./core.js";
 import {approve, dupOf, link, review, waited, fetchEdits, approveEdit, declineEdit, editLines} from "./register.js";
 
 const POLL = 6000;
@@ -44,33 +44,42 @@ function draw(){
   if (box.querySelector(".armed")) return; // keep "Tap again to confirm" until it is tapped or times out
   if (!open || !r) {
     shown = null;
-    const nR = queue.filter(x => x._t === "reg").length, nE = queue.length - nR;
-    return put("isl", `<button type="button" class="isl-pill${nR ? "" : " edit"}" data-isl="open">${nR ? `<span class="isl-dot"></span><b>${nR}</b> new registration${nR === 1 ? "" : "s"}` : ""}
-      ${nE ? `<span class="isl-dot ed"></span><b>${nE}</b> detail change${nE === 1 ? "" : "s"}` : ""}${!r ? ", all skipped" : ""}</button>`);
+    // Compact: a black capsule, like the iPhone's. Left: what's waiting; right: how many.
+    const nR = queue.filter(x => x._t === "reg").length, nE = queue.length - nR, first = queue.find(x => !skipped.has(x.id)) || queue[0];
+    const who = first._t === "edit" ? c0(first)?.full_name || first.code : first.full_name;
+    return put("isl", `<button type="button" class="isl-pill" data-isl="open" aria-label="Open: ${nR} new registrations, ${nE} detail changes">
+      <span class="isl-mini ${first._t === "edit" ? "ed" : ""}" aria-hidden="true">${esc(initials(who))}</span>
+      <span class="isl-pt">${!r ? "All skipped" : nR && nE ? "Waiting at the desk" : nR ? `New registration${nR === 1 ? "" : "s"}` : `Detail change${nE === 1 ? "" : "s"}`}</span>
+      ${nR ? `<span class="isl-n">${nR}</span>` : ""}${nE ? `<span class="isl-n ed">${nE}</span>` : ""}</button>`);
   }
   const c = state.c, pos = queue.indexOf(r) + 1;
   // The card springs open only when a new person comes up, not on every refresh.
   const pop = shown !== r.id; shown = r.id;
+  const top = (label, ed) => `<div class="isl-top"><span class="isl-dot ${ed ? "ed" : ""}"></span><span>${label}</span>${queue.length > 1 ? `<span class="isl-sep">·</span><span class="num">${pos} of ${queue.length}</span>` : ""}
+      <span class="isl-sep">·</span><span>${esc(waited(r.created_at))}</span><button type="button" class="isl-x" data-isl="min" aria-label="Minimise">${icon("down", "ic sm")}</button></div>`;
   if (r._t === "edit") {
-    const a = c?.attendees.find(x => x.id === r.attendee_id);
-    return put("isl open", `<div class="isl-card edit${pop ? " pop" : ""}">
-      <div class="isl-top"><span class="isl-dot ed"></span><span class="isl-count">Detail change${queue.length > 1 ? ` ${pos} of ${queue.length}` : ""}</span><span class="isl-wait">${esc(waited(r.created_at))}</span>
-        <button type="button" class="isl-x" data-isl="min" aria-label="Minimise">${icon("down", "ic sm")}</button></div>
-      <div class="isl-who"><b dir="auto">${esc(a?.full_name || "")}</b><span>ID <span class="num">${esc(r.code)}</span>${a?.category ? " · " + esc(a.category) : ""}</span></div>
+    const a = c0(r);
+    return put("isl open", `<div class="isl-card edit${pop ? " pop" : ""}">${top("Detail change", true)}
+      <div class="isl-row"><div class="isl-who"><span class="isl-av ed" aria-hidden="true">${esc(initials(a?.full_name || r.code))}</span><span class="isl-txt"><b dir="auto">${esc(a?.full_name || "")}</b><span>ID <span class="num">${esc(r.code)}</span>${a?.category ? " · " + esc(a.category) : ""}</span></span></div>
+        <div class="isl-round"><button type="button" class="isl-r no" data-isl="decline" aria-label="Decline" title="Decline">${icon("x")}</button><button type="button" class="isl-r ok ed" data-isl="approve" aria-label="Approve change" title="Approve change">${icon("check")}</button></div></div>
       <div class="isl-diff">${editLines(r).map(([k, o, n]) => `<div><small>${esc(k)}</small><s dir="auto">${esc(o)}</s><b dir="auto">${esc(n)}</b></div>`).join("")}</div>
-      <div class="isl-acts ed"><button type="button" class="isl-b no" data-isl="decline">Decline</button><button type="button" class="isl-b" data-isl="skip">Skip</button>
-        <button type="button" class="isl-b go" data-isl="approve">${icon("check", "ic sm")}Approve change</button></div></div>`, pop);
+      <div class="isl-caps"><button type="button" class="isl-cap" data-isl="skip">Skip</button></div></div>`, pop);
   }
   const d = c && dupOf(c, r);
-  put("isl open", `<div class="isl-card${pop ? " pop" : ""}">
-    <div class="isl-top"><span class="isl-dot"></span><span class="isl-count">New registration${queue.length > 1 ? ` ${pos} of ${queue.length}` : ""}</span><span class="isl-wait">${esc(waited(r.created_at))}</span>
-      <button type="button" class="isl-x" data-isl="min" aria-label="Minimise">${icon("down", "ic sm")}</button></div>
-    <button type="button" class="isl-who" data-isl="edit" title="Check and edit the details"><b dir="auto">${esc(r.full_name)}</b>
-      <span>${[r.category && esc(r.category), r.entity && esc(r.entity), r.country && `${flag(r.country)}${esc(r.country)}`, r.phone && `<span class="num">${esc(r.phone)}</span>`].filter(Boolean).join(" · ") || "No other details"}</span></button>
+  put("isl open", `<div class="isl-card${pop ? " pop" : ""}">${top("New registration")}
+    <div class="isl-row"><button type="button" class="isl-who" data-isl="edit" title="Check and edit the details"><span class="isl-av" aria-hidden="true">${esc(initials(r.full_name))}</span><span class="isl-txt"><b dir="auto">${esc(r.full_name)}</b>
+      <span>${[r.category && esc(r.category), r.entity && esc(r.entity), r.country && `${flag(r.country)}${esc(r.country)}`].filter(Boolean).join(" · ") || "No other details"}</span></span></button>
+      <div class="isl-round"><button type="button" class="isl-r no" data-isl="decline" aria-label="Decline" title="Decline">${icon("x")}</button><button type="button" class="isl-r ok" data-isl="print" aria-label="Add and print badge" title="Add and print badge">${icon("print")}</button></div></div>
     ${d ? `<div class="isl-dup"><p>${icon("alert", "ic sm")}Looks like <b>${esc(d.code)} ${esc(d.full_name)}</b>, already registered</p>
-      <div class="isl-acts two"><button type="button" class="isl-b" data-isl="link">Same person, link</button><button type="button" class="isl-b warn" data-isl="linkprint">${icon("print", "ic sm")}Link and print badge</button></div></div>` : ""}
-    <div class="isl-acts"><button type="button" class="isl-b no" data-isl="decline">Decline</button><button type="button" class="isl-b" data-isl="skip">Skip</button>
-      <button type="button" class="isl-b" data-isl="add">${icon("check", "ic sm")}Add</button><button type="button" class="isl-b go" data-isl="print">${icon("print", "ic sm")}Add and print</button></div></div>`, pop);
+      <div class="isl-caps"><button type="button" class="isl-cap" data-isl="link">Same person, link</button><button type="button" class="isl-cap warn" data-isl="linkprint">${icon("print", "ic sm")}Link and print</button></div></div>` : ""}
+    <div class="isl-caps"><button type="button" class="isl-cap" data-isl="skip">Skip</button><button type="button" class="isl-cap" data-isl="add">${icon("check", "ic sm")}Add without printing</button></div></div>`, pop);
+}
+const c0 = r => state.c?.attendees.find(x => x.id === r.attendee_id);
+// Round buttons can't hold "Tap again to confirm", so the first tap turns the red circle into a capsule that says "Decline?".
+function sure(b, fn){
+  if (b.classList.contains("armed")) return fn();
+  const was = b.innerHTML; b.classList.add("armed"); b.textContent = "Decline?";
+  setTimeout(() => { if (!document.contains(b)) return; b.classList.remove("armed"); b.innerHTML = was; }, 3000);
 }
 function put(cls, html, force = false){
   if (!force && html.replace(" pop", "") === last.replace(" pop", "") && box.className === cls) return;
@@ -87,11 +96,11 @@ document.addEventListener("click", async e => {
   if (k === "skip") { skipped.add(r.id); return draw(); }
   if (r._t === "edit") {
     if (k === "approve") return act(r, () => approveEdit(r, {reload: async () => {}}));
-    if (k === "decline") return armed(b, () => act(r, () => declineEdit(r, {reload: async () => {}})));
+    if (k === "decline") return sure(b, () => act(r, () => declineEdit(r, {reload: async () => {}})));
     return;
   }
   if (k === "edit") return review(state.c, r, {reload: done(r)});
-  if (k === "decline") return armed(b, () => act(r, async () => {
+  if (k === "decline") return sure(b, () => act(r, async () => {
     const { error } = await SB.from("registrations").update({status: "rejected", decided_at: new Date().toISOString()}).eq("id", r.id);
     if (error) throw error; toast(`${r.full_name} declined`); }));
   if (k === "link" || k === "linkprint") { const a = dupOf(state.c, r); if (a) return act(r, () => link(state.c, r, a, {reload: async () => {}}, {print: k === "linkprint"})); }
