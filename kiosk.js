@@ -59,7 +59,7 @@ export async function renderKiosk(app, confId){
   // The certificate they will get, in small: the real design and the name in its place, the same size proportions as print.
   const preview = (p, name) => {
     const ls = f?.layouts || [], ap = ls.find(l => l.kind === "appreciation")?.layout;
-    const L = (ap && (ap.categories || ["Speaker"]).includes(p.category) ? ap : ls.find(l => l.kind === "certificate")?.layout);
+    const L = (ap?.bg && (ap.categories || ["Speaker"]).includes(p.category) ? ap : ls.find(l => l.kind === "certificate")?.layout);
     const nf = L?.bg && (L.fields || []).find(x => x.show && (x.key === "cert_name" || x.key === "full_name") && x.type !== "qr");
     if (!nf) return "";
     const pct = (v, of) => (v / of * 100).toFixed(3) + "%", cq = pt => (pt * .3528 / L.w * 100).toFixed(3) + "cqw";

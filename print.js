@@ -45,7 +45,8 @@ export const workshopsOf = c => c.conf.cert_self?.workshops || [];
 // Which certificate someone gets: appreciation if that layout is set up and covers their category, else attendance.
 export function certKind(c, a){
   const ap = c.layouts.find(l => l.kind === "appreciation")?.layout;
-  return ap && (ap.categories || ["Speaker"]).includes(a?.category) ? "appreciation" : "certificate";
+  // Until the appreciation certificate has a design, everyone gets the attendance one (no blank pages).
+  return ap?.bg && (ap.categories || ["Speaker"]).includes(a?.category) ? "appreciation" : "certificate";
 }
 export const layoutFor = (c, kind) => { const saved = c.layouts.find(l => l.kind === kind)?.layout; return saved ? {...clone(DEFAULTS[kind]), ...saved} : clone(DEFAULTS[kind]); };
 
