@@ -134,6 +134,7 @@ export function quickActions(c, a, ctx){
     body: `<div class="qa-done"><span class="qa-tick">${icon("check")}</span><div><b>${esc(a.full_name)}</b><span>is in, with badge ID</span></div><b class="qa-id num">${esc(a.code)}</b></div>
       <div class="qa-grid">
         <button type="button" class="qx big" data-qa-do="print">${icon("print")}<span><b>Print badge</b><small>Send it to the printer now</small></span></button>
+        <button type="button" class="qx" data-qa-do="text">${icon("print")}<span><b>Badge, text only</b><small>On a pre-printed card</small></span></button>
         <button type="button" class="qx" data-qa-do="pdf">${icon("download")}<span><b>Badge PDF</b><small>To send on WhatsApp</small></span></button>
         <button type="button" class="qx" data-qa-do="link">${icon("link")}<span><b>Copy phone badge link</b><small>Their badge on their phone</small></span></button>
         <button type="button" class="qx" data-qa-do="open">${icon("user")}<span><b>Open their details</b><small>Check in, certificate, fees</small></span></button>
@@ -141,6 +142,7 @@ export function quickActions(c, a, ctx){
   $$("[data-qa-do]", d).forEach(b => b.onclick = async () => {
     const k = b.dataset.qaDo;
     if (k === "print") { d.close(); return printDocs(c, "badge", [a]); }
+    if (k === "text") { d.close(); return printDocs(c, "badge", [a], {full: false}); }
     if (k === "pdf") { b.disabled = true; try { const url = URL.createObjectURL(await certPdf(c, [{...a, cert_name: a.cert_name || a.full_name}], {kind: "badge"}));
       Object.assign(document.createElement("a"), {href: url, download: `Badge ${a.code} - ${a.full_name}.pdf`}).click(); setTimeout(() => URL.revokeObjectURL(url), 4000); } catch (err) { toast(err.message, "bad"); } b.disabled = false; return; }
     if (k === "link") return navigator.clipboard.writeText(badgeUrl(c.conf.id, a.code)).then(() => toast("Link copied. Send it to them on WhatsApp."), () => toast("Couldn't copy the link.", "bad"));
@@ -206,7 +208,7 @@ function personDialog(c, a, ctx){
     body: `${a ? `<div class="p-head"><span class="av lg">${esc(initials(a.full_name))}</span><div style="min-width:0"><b>${esc(a.full_name)}</b>
         <div class="p-tags"><span class="pill acc num">ID ${esc(a.code)}</span>${a.category ? `<span class="pill">${esc(a.category)}</span>` : ""}
         ${Number(a.fee_amount) ? `<span class="pill ${a.fee_paid ? "ok" : "warn"}">${a.fee_paid ? "Paid" : "Not paid"} ${money(a.fee_amount)} JOD</span>` : ""}</div></div></div>
-      <div class="p-actions"><button type="button" class="ghost small" data-print="badge">${icon("print")}Badge</button><button type="button" class="ghost small" data-print="certificate">${icon("print")}Certificate</button><button type="button" class="ghost small" data-pdf="badge">${icon("download")}Badge PDF</button><button type="button" class="ghost small" data-pdf="certificate">${icon("download")}Certificate PDF</button>${wsFor(c, a).length ? `<button type="button" class="ghost small" data-wspdf>${icon("download")}Workshop certificate${wsFor(c, a).length > 1 ? "s" : ""} PDF</button>` : ""}
+      <div class="p-actions"><button type="button" class="ghost small" data-print="badge">${icon("print")}Badge</button><button type="button" class="ghost small" data-print="badge" data-text="1">${icon("print")}Badge, text only</button><button type="button" class="ghost small" data-print="certificate">${icon("print")}Certificate</button><button type="button" class="ghost small" data-pdf="badge">${icon("download")}Badge PDF</button><button type="button" class="ghost small" data-pdf="certificate">${icon("download")}Certificate PDF</button>${wsFor(c, a).length ? `<button type="button" class="ghost small" data-wspdf>${icon("download")}Workshop certificate${wsFor(c, a).length > 1 ? "s" : ""} PDF</button>` : ""}
         ${Number(a.fee_amount) ? `<button type="button" class="ghost small" data-paytoggle>${icon("money")}${a.fee_paid ? "Mark not paid" : "Mark paid"}</button>` : ""}</div>
       ${pickable.length ? `<div class="p-checkin"><select id="pSess" aria-label="Session">${pickable.slice(0, 60).map(s => `<option value="${s.id}">${rank(s) === 0 ? "Live: " : ""}${esc(dayShort(s.day))} ${t5(s.start_time)}, ${esc(s.title)}</option>`).join("")}</select>
         <button type="button" class="soft small" id="pCheck">${icon("check")}Check in</button></div>` : ""}` : ""}
@@ -252,7 +254,7 @@ function personDialog(c, a, ctx){
       await ctx.reload(); setTimeout(() => quickActions(state.c, state.c.attendees.find(x => x.id === made?.id) || {...row, ...made}, ctx), 50);
     },
     onDanger: async () => { const { error } = await SB.from("attendees").delete().eq("id", a.id); if (error) throw error; toast("Attendee deleted"); await ctx.reload(); }});
-  $$("[data-print]", d).forEach(b => b.onclick = () => printDocs(c, b.dataset.print, [a]));
+  $$("[data-print]", d).forEach(b => b.onclick = () => printDocs(c, b.dataset.print, [a], b.dataset.text ? {full: false} : {}));
   // Digital copies: the badge, or the certificate (attendance or appreciation, by category), as a PDF file to send.
   $$("[data-pdf]", d).forEach(b => b.onclick = async () => {
     const badge = b.dataset.pdf === "badge"; b.disabled = true; toast("Making the PDF…");
