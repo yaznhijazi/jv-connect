@@ -1,6 +1,6 @@
 // Badge and certificate designer + printing. Positions are in millimetres from the top-left of the page,
 // so a layout lines up the same on screen and on paper. A printer offset fixes printers that shift the page.
-import {SB, $, $$, esc, dateRange, dayLong, toast, upload, qrSvg, barcodeSvg, loadScript, categoriesOf, icon, can, tagsUsed} from "./core.js";
+import {SB, $, $$, esc, dateRange, dayLong, toast, upload, qrSvg, barcodeSvg, loadScript, categoriesOf, icon, can, tagsUsed, dialog} from "./core.js";
 
 const PX_PER_MM = 96 / 25.4;
 export const FONTS = ["Plus Jakarta Sans", "Arial", "Georgia", "Times New Roman", "Playfair Display", "Cormorant Garamond", "Great Vibes", "Cairo", "Amiri"];
@@ -159,6 +159,18 @@ export async function printDocs(c, kind, people, {test = false, sheet = false, e
 }
 addEventListener("afterprint", () => { $("#printArea").innerHTML = ""; });
 
+// Browsers only print without the print window when Chrome is started with --kiosk-printing. This hands the team a ready shortcut.
+export function noWindowHelp(){
+  const cmd = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --kiosk-printing "${location.href.split("#")[0]}"`;
+  const d = dialog({title: "Print with no print window", submit: "",
+    body: `<p style="margin:0">Badges and certificates print straight away on this laptop's default printer, with no window to click. It works for every Print button.</p>
+      <ol class="nw-steps"><li>Close every Chrome window on this laptop.</li>
+        <li>Right-click the desktop, choose <b>New</b> then <b>Shortcut</b>, paste this and press Next:<div class="linkbox"><input readonly value="${esc(cmd)}" aria-label="Shortcut" onfocus="this.select()"><button type="button" class="ghost small" id="nwCopy">Copy</button></div></li>
+        <li>Name it <b>JV Connect printing</b> and open the system from it.</li>
+        <li>In Windows, set the badge or certificate printer as the <b>default printer</b>, with the right paper size.</li></ol>
+      <p class="note" style="margin:0">Run <b>Printer check</b> once after this to confirm the size. A Mac uses the same option: <code>open -a "Google Chrome" --args --kiosk-printing</code></p>`});
+  $("#nwCopy", d).onclick = () => navigator.clipboard.writeText(cmd).then(() => toast("Shortcut copied"));
+}
 // Printer check: one page at the card's exact size. A frame on the edge, a 50 mm square and the word ONCE in the middle
 // show at a glance whether the printer shrinks the page (square under 50 mm), cuts it (frame missing) or doubles it (two per card).
 export function printCheck(L){
@@ -262,7 +274,7 @@ export function render(el, c, ctx){
       <textarea id="pIds" hidden placeholder="0427 3815 1200, or a range: 0001-0100" aria-label="IDs or ranges to print"></textarea>
       ${perSheet(L).n > 1 ? `<label>Paper<select id="pSheet"><option value="one">One per page (${L.w} × ${L.h} mm)</option><option value="a4">${perSheet(L).n} per A4 sheet, with cut lines</option></select></label>` : ""}
       <button type="button" class="big-btn" id="pPrint">Print</button>
-      <div class="row"><button type="button" class="ghost" id="pTest">Test print one</button><button type="button" class="ghost" id="pCheck" title="One page that shows whether the printer shrinks, cuts or doubles the ${noun}">Printer check</button><button type="button" class="ghost" id="pPdf">${icon("download")}Download as PDF</button></div>
+      <div class="row"><button type="button" class="ghost" id="pTest">Test print one</button><button type="button" class="ghost" id="pCheck" title="One page that shows whether the printer shrinks, cuts or doubles the ${noun}">Printer check</button><button type="button" class="ghost" id="pNoWin" title="Print straight away, without the print window">${icon("print")}Print with no window</button><button type="button" class="ghost" id="pPdf">${icon("download")}Download as PDF</button></div>
       <p class="note" style="margin:0" id="pPdfNote">Download makes one PDF with the full design, to send by email or WhatsApp.</p></div>`;
 
   const editTab = `<div class="panel form"><h3>Design</h3>
@@ -373,6 +385,7 @@ export function render(el, c, ctx){
     $("#pPrint").onclick = () => withUnsaved(() => printDocs(c, ui.kind, pick(), {sheet: $("#pSheet")?.value === "a4", exact: true, full}));
     $("#pTest").onclick = () => withUnsaved(() => printDocs(c, ui.kind, [sample], {test: true, exact: true, full}));
     $("#pCheck").onclick = () => printCheck(L);
+    $("#pNoWin").onclick = noWindowHelp;
     $("#pPdf").onclick = async () => {
       const people = pick(), b = $("#pPdf"), note = $("#pPdfNote"); if (!people.length) return;
       if (people.length > 150) toast(`${people.length} pages take a few minutes. Keep this page open.`);

@@ -1052,60 +1052,99 @@ button.isl-who:hover .isl-txt b{text-decoration:underline;text-decoration-color:
 .cm-acts .note{flex:1 1 260px;margin:0}
 @media (max-width:700px){.cm-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-/* ---------- self-print kiosk (attendee touch screen or phone) ---------- */
-.ks{grid-template-columns:minmax(0,1fr);min-height:100vh;min-height:100dvh;background:radial-gradient(120% 80% at 50% 0%,#e3f4fa 0%,var(--bg) 60%);color:var(--fg);display:grid;grid-template-rows:auto 1fr}
-.ks-bar{display:flex;align-items:center;gap:12px;padding:14px 22px;background:var(--navy-3);color:#fff}
-.ks-bar b{font:700 15px/1.2 var(--display);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ks-bar span{font-size:13px;color:#a9c3cf;white-space:nowrap}
-.ks-stage{display:grid;grid-template-columns:minmax(0,1fr);place-items:center;padding:24px 16px}
-.ks-card{width:min(560px,100%);background:var(--surface);border-radius:28px;padding:28px;display:grid;gap:16px;box-shadow:0 30px 60px -30px rgba(0,42,61,.35),0 0 0 1px var(--line)}
-.ks-center{text-align:center;justify-items:center}
-.ks-card h1{font:700 28px/1.15 var(--display);margin:0}
-.ks-ar{display:block;font-family:Cairo,var(--font);font-weight:600;font-size:.8em;color:var(--muted);margin-top:2px}
-.ks-step{font:700 12px/1 var(--font);letter-spacing:.08em;color:var(--accent);background:var(--accent-soft);justify-self:start;padding:6px 10px;border-radius:999px}
-.ks-center .ks-step{justify-self:center}
-.ks-sub{margin:0;color:var(--muted)}
-.ks-code{font:700 44px/1 var(--display)!important;letter-spacing:.18em;text-align:center;height:76px;border-radius:18px!important}
+/* ---------- self-print kiosk (attendee touch screen or phone) ----------
+   Calm and big: one card, one question at a time, touch targets of 64px and more. */
+.ks{--k-r:26px;grid-template-columns:minmax(0,1fr);min-height:100vh;min-height:100dvh;display:grid;grid-template-rows:auto 1fr;color:var(--fg);
+  background:radial-gradient(90% 60% at 50% -10%,#cdeefa 0%,transparent 60%),radial-gradient(60% 50% at 100% 100%,#e4f3dc 0%,transparent 60%),var(--bg)}
+.ks[lang=ar]{font-family:"Cairo",var(--font)}
+.ks[lang=ar] h1,.ks[lang=ar] .ks-go,.ks[lang=ar] .ks-big{font-family:"Cairo",var(--display)}
+.ks-bar{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--navy-3);color:#fff}
+.ks-ev{display:grid;flex:1;min-width:0}
+.ks-ev b{font:700 15px/1.25 var(--display);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ks-ev small{font-size:12.5px;color:#a9c3cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ks-lang{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:999px;min-height:40px;padding:0 16px;font:700 14px/1 "Cairo",var(--font)}
+.ks-lang:hover{background:rgba(255,255,255,.2)}
+.ks-stage{display:grid;grid-template-columns:minmax(0,1fr);justify-items:center;align-content:center;gap:18px;padding:22px 16px 32px}
+.ks-steps{list-style:none;margin:0;padding:0;display:flex;gap:6px;width:min(560px,100%)}
+.ks-steps li{flex:1;display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;font-size:13px;font-weight:600;color:var(--muted);background:rgba(255,255,255,.55)}
+.ks-steps li span{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--line);color:var(--muted);font-size:12px}
+.ks-steps li.on{background:var(--surface);color:var(--fg);box-shadow:0 4px 14px -8px rgba(0,42,61,.35)}
+.ks-steps li.on span{background:var(--navy-3);color:#fff}
+.ks-steps li.done span{background:var(--ok-solid);color:#fff}
+.ks-card{width:min(560px,100%);background:var(--surface);border-radius:var(--k-r);padding:28px;display:grid;gap:16px;box-shadow:0 30px 60px -32px rgba(0,42,61,.4),0 0 0 1px var(--line)}
+.ks-card form{display:grid;gap:16px}
+.ks-card h1{font:700 30px/1.15 var(--display);margin:0;letter-spacing:-.01em}
+.ks-sub{margin:0;color:var(--muted);font-size:16px}
+.ks-center{display:grid;gap:14px;justify-items:center;text-align:center}
+.ks-code{font:700 46px/1 var(--display)!important;letter-spacing:.22em;text-align:center;height:84px;border-radius:20px!important;border:2px solid var(--line-2)!important;background:var(--surface-2)!important}
+.ks-code:focus{border-color:var(--sky)!important;background:var(--surface)!important}
 .ks-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.ks-pad button{height:68px;border-radius:18px;font:700 26px/1 var(--display);background:var(--surface-2);color:var(--fg);border:1px solid var(--line)}
+.ks-pad button{height:70px;border-radius:20px;font:700 28px/1 var(--display);background:var(--surface);color:var(--fg);border:1px solid var(--line-2);box-shadow:0 2px 0 var(--line);transition:transform .08s,background .15s}
 .ks-pad button:hover{background:var(--accent-soft)}
-.ks-pad button:active{transform:scale(.96)}
-.ks-pad .go{background:var(--accent);color:var(--accent-ink);border-color:transparent}
-.ks-pad .go .ic{width:28px;height:28px}
+.ks-pad button:active{transform:translateY(2px);box-shadow:none}
+.ks-pad .fn{font-size:18px;color:var(--muted);background:var(--surface-2)}
+.ks-go{min-height:68px;border-radius:20px;border:0;display:flex;align-items:center;justify-content:center;gap:10px;font:700 20px/1.2 var(--display);color:#fff;
+  background:linear-gradient(180deg,var(--navy),var(--navy-3));box-shadow:0 12px 24px -12px rgba(0,42,61,.6);transition:transform .1s,opacity .2s}
+.ks-go:active{transform:scale(.98)}
+.ks-go:disabled{opacity:.3;box-shadow:none}
+.ks-go .ic{width:24px;height:24px}
+.ks[dir=rtl] .ks-go .ic:last-child{transform:scaleX(-1)}
+.ks-go.print{background:linear-gradient(180deg,#58b736,#3f9a2c);box-shadow:0 14px 26px -12px rgba(63,154,44,.7)}
+.ks-go.wait{opacity:.6;pointer-events:none}
 .ks-err{margin:0;min-height:1.4em;color:var(--bad);font-weight:600;text-align:center}
-.ks-who{display:flex;align-items:center;gap:12px;font-size:15px;color:var(--muted)}
-.ks-av{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--navy-3);color:#fff;font:700 15px/1 var(--display)}
-.ks-link{margin-left:auto;background:none;border:0;color:var(--accent);text-decoration:underline;padding:0;min-height:0}
-.ks-note{margin:0;display:flex;gap:8px;align-items:center;font-size:14px;color:var(--warn);background:var(--warn-bg);padding:10px 12px;border-radius:14px}
-.ks-q{display:grid;gap:10px;padding:16px;border-radius:20px;border:2px solid var(--line);transition:border-color .2s,background .2s}
-.ks-q.ok{border-color:var(--ok-solid);background:color-mix(in srgb,var(--ok-bg) 60%,var(--surface))}
+.ks-hello{display:flex;align-items:center;gap:14px}
+.ks-hello h1{font-size:28px}
+.ks-av{width:58px;height:58px;border-radius:50%;flex:none;display:grid;place-items:center;font:700 20px/1 var(--display);color:#fff;background:linear-gradient(160deg,var(--navy),var(--navy-3))}
+.ks-link{margin-inline-start:auto;align-self:flex-start;background:none;border:0;color:var(--accent);text-decoration:underline;padding:4px;min-height:0;font-size:14px}
+.ks-note{margin:0;display:flex;gap:8px;align-items:center;font-size:14px;color:var(--warn);background:var(--warn-bg);padding:10px 14px;border-radius:14px}
+.ks-q{all:unset;box-sizing:border-box;position:relative;display:grid;gap:6px;padding:18px 20px;border-radius:20px;border:2px solid var(--line-2);background:var(--surface);cursor:pointer;
+  text-align:start;transition:border-color .2s,background .2s,box-shadow .2s}
+button.ks-q:hover{border-color:var(--sky)}
+button.ks-q:focus-visible{outline:3px solid var(--ring);outline-offset:2px}
+.ks-q.ok{border-color:var(--ok-solid);background:color-mix(in srgb,var(--ok-bg) 70%,var(--surface));box-shadow:0 10px 24px -16px rgba(63,154,44,.7)}
+.ks-q.edit{cursor:default;border-color:var(--sky)}
 .ks-ql{font-size:13px;font-weight:600;color:var(--muted)}
-.ks-ql .ks-ar{display:inline;margin-left:6px}
+.ks-ql small{font-weight:500;opacity:.8}
 .ks-big{font:700 26px/1.2 var(--display);overflow-wrap:anywhere}
+button.ks-q{padding-inline-end:72px}
 .ks-big.small{font-size:20px}
-.ks-in{font-size:20px!important;height:56px;border-radius:14px!important}
-.ks-hint{margin:0;font-size:13px;color:var(--muted)}
-.ks-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.ks-b{min-height:52px;border-radius:16px;font-size:16px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--surface-2);color:var(--fg);border:1px solid var(--line-2)}
-.ks-b.go{background:var(--surface);border:2px solid var(--ok-solid);color:var(--ok)}
-.ks-b.go.on{background:var(--ok-solid);color:#fff}
-.ks-print{min-height:72px;border-radius:20px;font:700 20px/1.2 var(--display);display:flex;align-items:center;justify-content:center;gap:12px;background:var(--navy-3);color:#fff;border:0}
-.ks-print .ks-ar{display:inline;color:#a9c3cf;font-size:.75em;margin:0 0 0 6px}
-.ks-print .ic{width:26px;height:26px}
-.ks-print:disabled{opacity:.35}
-.ks-printer{position:relative;width:120px;height:120px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);overflow:hidden}
-.ks-printer .ic{width:48px;height:48px}
-.ks-printer.busy{animation:ks-pulse 1.2s ease-in-out infinite}
-.ks-printer.done{background:var(--ok-solid);color:#fff;animation:ks-pop .5s cubic-bezier(.3,1.5,.5,1)}
-.ks-paper{position:absolute;left:38px;right:38px;top:-60px;height:46px;background:#fff;border-radius:4px;box-shadow:0 2px 6px rgba(0,0,0,.15);opacity:0}
-.ks-printer.busy .ks-paper{opacity:1;animation:ks-feed 1.6s ease-in-out infinite}
-@keyframes ks-pulse{50%{box-shadow:0 0 0 18px rgba(0,189,235,.12)}}
-@keyframes ks-feed{from{top:-60px}to{top:70px}}
-@keyframes ks-pop{from{transform:scale(.6)}}
-.ks-status{margin:0;font:700 20px/1.3 var(--display);color:var(--accent)}
-.ks-track.done .ks-status{color:var(--ok)}
-@media (max-width:520px){.ks-card{padding:20px;border-radius:22px}.ks-card h1{font-size:23px}.ks-pad button{height:58px}.ks-btns{grid-template-columns:1fr}}
-@media (prefers-reduced-motion:reduce){.ks-printer,.ks-paper{animation:none!important}}
+.ks-tick{position:absolute;inset-inline-end:16px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;display:grid;place-items:center;
+  border:2px solid var(--line-2);color:transparent;transition:all .2s}
+.ks-q.ok .ks-tick{background:var(--ok-solid);border-color:var(--ok-solid);color:#fff;transform:translateY(-50%) scale(1.05)}
+.ks-tap{font-size:13px;color:var(--accent);font-weight:600}
+.ks-q.ok .ks-tap{color:var(--ok)}
+.ks-edit{justify-self:start;margin-top:-8px;background:none;border:0;padding:4px 2px;min-height:0;color:var(--muted);font-size:14px;text-decoration:underline;text-underline-offset:3px}
+.ks-in{font-size:20px!important;height:58px;border-radius:14px!important}
+.ks-hint{font-size:13px;color:var(--muted)}
+.ks-row{display:flex;gap:10px}
+.ks-b{min-height:54px;padding:0 22px;border-radius:16px;font-size:16px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--surface-2);color:var(--fg);border:1px solid var(--line-2)}
+.ks-b.ok{flex:1;background:var(--ok-solid);border-color:transparent;color:#fff}
+.ks-status{margin:0;font-size:18px;color:var(--muted)}
+.ks-status b{color:var(--fg)}
+.ks-track.done .ks-status b{color:var(--ok)}
+/* the printer: a sheet with their name slides out */
+.ks-machine{position:relative;width:220px;height:190px;margin:4px 0 6px}
+.ks-body{position:absolute;left:10px;right:10px;top:70px;height:70px;border-radius:18px;background:linear-gradient(180deg,#1b4a63,var(--navy-3));box-shadow:0 14px 26px -14px rgba(0,42,61,.7)}
+.ks-body span{position:absolute;left:30px;right:30px;top:16px;height:8px;border-radius:4px;background:#04131b}
+.ks-sheet{position:absolute;left:44px;right:44px;top:78px;height:104px;background:#fff;border-radius:6px;padding:12px 8px;display:grid;gap:4px;align-content:start;text-align:center;
+  box-shadow:0 6px 14px -6px rgba(0,0,0,.3);border:1px solid #e3e8eb;z-index:1;transition:top .9s cubic-bezier(.3,.8,.3,1)}
+.ks-sheet small{font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:#7d2340}
+.ks-sheet b{font:700 13px/1.15 "Playfair Display",Georgia,serif;color:#1d2556;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.ks-sheet i{display:block;height:3px;margin:6px 18px 0;border-radius:2px;background:#e6dcd5}
+.ks-machine.busy .ks-sheet{animation:ks-out 2.4s ease-in-out infinite}
+.ks-machine.done .ks-sheet{top:96px}
+.ks-machine.done::after{content:"";position:absolute;right:6px;top:4px;width:44px;height:44px;border-radius:50%;background:var(--ok-solid) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5L20 7'/%3E%3C/svg%3E") center/24px no-repeat;
+  animation:ks-pop .5s cubic-bezier(.3,1.6,.5,1)}
+.ks-machine .ks-sheet{z-index:0}
+.ks-machine.busy .ks-sheet,.ks-machine.done .ks-sheet{z-index:2}
+@keyframes ks-out{0%{top:78px}60%,100%{top:96px}}
+@keyframes ks-pop{from{transform:scale(0)}}
+.ks-count{width:min(320px,100%);height:6px;border-radius:999px;background:var(--line);overflow:hidden}
+.ks-count i{display:block;height:100%;background:var(--ok-solid);animation:ks-count 12s linear forwards}
+@keyframes ks-count{from{width:100%}to{width:0}}
+@media (max-width:520px){.ks-card{padding:20px;border-radius:22px}.ks-card h1,.ks-hello h1{font-size:24px}.ks-pad button{height:60px;font-size:24px}
+  .ks-steps li{font-size:0;justify-content:center;padding:6px}.ks-steps li span{font-size:12px}.ks-code{font-size:38px!important;height:72px}.ks-big{font-size:22px}}
+@media (prefers-reduced-motion:reduce){.ks-sheet,.ks-machine::after,.ks-count i{animation:none!important;transition:none}}
 
 /* ---------- print station (a laptop with a printer) ---------- */
 .st{grid-template-columns:minmax(0,1fr);min-height:100vh;background:#04131b;color:#e9f4f8;display:grid;grid-template-rows:auto 1fr}
@@ -1172,3 +1211,6 @@ button.isl-who:hover .isl-txt b{text-decoration:underline;text-decoration-color:
 .sp-pick{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;cursor:pointer}
 .sp-pick input{margin:0}
 @media (prefers-reduced-motion:reduce){.side-print .sp-dot{animation:none}}
+
+.nw-steps{margin:0;padding-inline-start:20px;display:grid;gap:10px}
+.nw-steps .linkbox{margin-top:8px}
