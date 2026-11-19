@@ -2,7 +2,7 @@
 // Kiosk (public): badge ID -> confirm the name and email with big buttons -> the certificate prints by itself.
 // Station (team login): a laptop with a printer. It takes the next job from the queue and prints it with no dialog
 // (Chrome started with --kiosk-printing). Three stations share one queue; each job goes to whichever is free.
-import {SB, $, $$, esc, dateRange, icon, toast, armed, qrSvg, store, state, loadConf, initials, dayShort, hm} from "./core.js";
+import {SB, $, $$, esc, dateRange, icon, toast, armed, qrSvg, store, state, loadConf, initials, dayShort, hm, dialog, can} from "./core.js";
 import {printDocs, printFonts} from "./print.js";
 
 const base = () => location.href.split("#")[0];
@@ -193,3 +193,69 @@ export function wireKiosk(el, c, ctx){
   };
   live();
 }
+
+/* ---------- "This device prints certificates": any team laptop with a printer, from any page of the system ----------
+   Turned on from the side menu. While on, this device takes the next certificate from the queue every few seconds and
+   prints it, the same as a station page. Only one device ever gets each certificate. */
+const BG = {conf: null, name: "", t: null, busy: false, count: 0, state: "", sub: ""};
+const bgKey = id => `printhere:${id}`;
+async function printJob(confId, j){
+  let c = await loadConf(confId);
+  if (!c.attendees.some(a => a.id === j.attendee_id)) c = await loadConf(confId, {force: true});
+  const a = c.attendees.find(x => x.id === j.attendee_id);
+  const done = new Promise(res => { addEventListener("afterprint", res, {once: true}); setTimeout(res, 45000); });
+  await printDocs(c, "certificate", [{...(a || {code: j.code, full_name: j.name}), cert_name: j.name}], {full: c.conf.print_kiosk?.full !== false});
+  await done;
+  await SB.from("print_jobs").update({status: "printed", printed_at: new Date().toISOString()}).eq("id", j.id);
+}
+const set = (st, sub = "") => { BG.state = st; BG.sub = sub; paint(); };
+async function loop(){
+  const id = BG.conf; if (!id) return;
+  const area = document.getElementById("printArea");
+  // Wait while something else is printing on this device (a badge, a sign): one print job at a time.
+  if (!BG.busy && !(area && area.innerHTML.trim()) && !document.querySelector("dialog[open]")) {
+    BG.busy = true;
+    try {
+      const { data: jobs, error } = await SB.rpc("c_station_claim", {p_conf: id, p_station: BG.name});
+      if (BG.conf !== id) return;
+      if (error) set("Offline", error.message);
+      else if (jobs?.length) { set("Printing", jobs[0].name); await printJob(id, jobs[0]); BG.count++; set("Printed", jobs[0].name);
+        SB.from("print_stations").update({printed: BG.count}).eq("conference_id", id).eq("name", BG.name); }
+      else if (BG.state !== "Printed" || Date.now() % 4 === 0) set("Ready");
+    } catch (err) { set("Error", err.message || ""); }
+    finally { BG.busy = false; }
+  }
+  if (BG.conf === id) BG.t = setTimeout(loop, 3000);
+}
+function bgStop(){ clearTimeout(BG.t); Object.assign(BG, {conf: null, name: "", t: null, count: 0, state: ""}); }
+// Called on every conference page: start, keep or stop printing on this device for that conference.
+export function bgWatch(confId){
+  const name = store.get(bgKey(confId)) || "";
+  if (!name) { if (BG.conf === confId) bgStop(); return paint(); }
+  if (BG.conf === confId && BG.name === name && BG.t) return paint();
+  bgStop(); Object.assign(BG, {conf: confId, name, state: "Ready"}); loop(); paint();
+}
+export const printHereBtn = () => `<button type="button" class="side-print" id="printHere"></button>`;
+function paint(){
+  const b = document.getElementById("printHere"); if (!b) return;
+  const on = !!BG.name && BG.conf === state.c?.conf.id;
+  b.className = "side-print" + (on ? ` on${BG.state === "Printing" ? " busy" : ""}${["Offline", "Error"].includes(BG.state) ? " bad" : ""}` : "");
+  b.title = on ? `${BG.name} prints certificates from the self-print QR on this device. Click to stop.` : "Use this device and its printer for the self-print certificates";
+  b.innerHTML = on ? `<span class="sp-dot" aria-hidden="true"></span><span class="sp-t"><b>${esc(BG.name)} · ${esc(BG.state)}</b><small>${BG.state === "Printing" ? esc(BG.sub) : `${BG.count} printed on this device`}</small></span>`
+    : `${icon("print")}<span class="sp-t"><b>Print certificates here</b><small>Use this device's printer</small></span>`;
+}
+document.addEventListener("click", e => {
+  if (!e.target.closest("#printHere") || !state.c) return;
+  const id = state.c.conf.id, on = BG.conf === id && BG.name;
+  if (on) return dialog({title: `${BG.name} is printing certificates`, submit: "", danger: "Stop printing here", need: "edit",
+    body: `<p style="margin:0">This device prints the certificates people ask for from the self-print QR. ${BG.count} printed so far.</p>
+      <p class="note" style="margin:0">Keep this tab open. Other pages of the system keep working while it prints.</p>`,
+    onDanger: () => { store.set(bgKey(id), ""); bgStop(); paint(); toast("This device stopped printing certificates"); }});
+  const k = state.c.conf.print_kiosk || {};
+  dialog({title: "Print certificates on this device", submit: "Start printing here", need: "edit",
+    body: `${k.open ? "" : `<p class="note" style="margin:0;color:var(--warn)">Self-print is closed. Open it on the Certificates page so people can send certificates.</p>`}
+      <p style="margin:0">Certificates people ask for from the QR print by themselves on this device's printer. With several devices on, each certificate goes to only one of them.</p>
+      <div class="seg" role="radiogroup" aria-label="Printer name">${["Printer 1", "Printer 2", "Printer 3", "Printer 4"].map((n, i) => `<label class="sp-pick"><input type="radio" name="pn" value="${n}" ${i === 0 ? "checked" : ""}>${n}</label>`).join("")}</div>
+      <p class="note" style="margin:0">Give each device a different name, so people see which printer to go to. To print without the print window, open Chrome with <code>--kiosk-printing</code>, and set this printer as the default with the certificate paper size.</p>`,
+    onSubmit: form => { const n = new FormData(form).get("pn") || "Printer 1"; store.set(bgKey(id), n); bgWatch(id); toast(`${n}: this device now prints certificates`); }});
+});

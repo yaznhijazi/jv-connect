@@ -37,6 +37,7 @@ function shell({conf = null, page = "", title, sub = "", actions = ""}){
       ${conf ? `<a class="side-conf" href="#/" title="Switch conference">${thumb}<span class="side-conf-txt"><b>${esc(conf.name)}</b><small>${esc(dateRange(conf.start_date, conf.end_date))}</small></span>${icon("down", "ic sm")}</a>` : ""}
       <button type="button" class="side-search" data-cmdk>${icon("search")}<span>Search</span><kbd>${kbd}</kbd></button>
       <nav class="side-nav">${nav}</nav>
+      ${conf && can("edit") ? kiosk.printHereBtn() : ""}
       <div class="side-foot"><span class="side-user" title="${esc(state.session?.user?.email)}">${icon("user")}<span>${esc(state.session?.user?.email || "")}</span></span>
         <button type="button" class="side-out" id="signOut" title="Sign out" aria-label="Sign out">${icon("logout")}</button></div>
     </aside>
@@ -259,6 +260,7 @@ async function renderConf(id, page){
   curCtx = {reload: async () => { await loadConf(id, {force: true}); return route(); }};
   await pages[page](el, c, curCtx);
   // A decision on the island refreshes the data; the page redraws unless a form is open on it.
+  kiosk.bgWatch(id);
   island.watch(id, {reload: async () => { await loadConf(id, {force: true}); setTimeout(() => { if (!$("dialog[open]")) route(); }, 400); }});
   if (my !== routeN) return;
   if (pending) { const fn = pending; pending = null; fn(); }
