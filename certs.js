@@ -2,7 +2,7 @@
 // the certificate (your designer layout, one page per workshop) is emailed through the conference Gmail.
 // You can also email everyone who attended a session in one go.
 import {SB, $, $$, esc, t5, hm, dayShort, dateRange, store, toast, armed, dialog, qrSvg, icon, initials, fetchAll, tagsOf} from "./core.js";
-import {certPdf, certShowsSession, workshopsOf, layoutFor, printFonts} from "./print.js";
+import {certPdf, certShowsSession, workshopsOf, layoutFor, printFonts, certKind} from "./print.js";
 
 const formUrl = id => `${location.href.split("#")[0]}#/cert/${id}`;
 const EMAIL = /^[a-z0-9._%+'-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
@@ -202,11 +202,43 @@ const mailText = () => ({subject: store.get("certSubject") || "Your workshop cer
 async function send(c, person, sessions, kind = "certificate"){
   const t = mailText(), fill = s => s.split("{name}").join(person.cert_name);
   const pages = sessions.map(s => ({...person, session_title: s.title, session_day: s.day}));
-  const { data, error } = await SB.functions.invoke("send-certificate", {body: {to: person.email, name: person.cert_name, subject: fill(t.subject), text: fill(t.body),
+  const { data, error } = await SB.functions.invoke("send-certificate", {body: {to: person.email, name: person.cert_name, event: c.conf.name, subject: fill(t.subject), text: fill(t.body),
     workshops: sessions.map(s => s.day ? `${s.title}, ${dayShort(s.day)}` : s.title), filename: fileName(person.cert_name), pdf: await b64(await certPdf(c, pages, {kind}))}});
   if (!error && data?.ok) return "";
   try { return (await error.context.json()).error; } catch { return error?.message || "Not sent."; }
 }
+
+/* ---------- the main certificate (attendance, or appreciation for their categories) by email ----------
+   Uses the certificate layout and the conference Gmail. Each send is remembered on the person (cert_sent.main), so a list
+   send skips whoever already has theirs. */
+const MAIN = "main";
+export const mainSent = a => (a?.cert_sent || {})[MAIN];
+export const hasMail = a => EMAIL.test(clean(a?.email));
+export async function emailMain(c, a){
+  const name = a.cert_name || a.full_name, to = clean(a.email).toLowerCase();
+  const what = certKind(c, a) === "appreciation" ? "certificate of appreciation" : "certificate of attendance";
+  const { data, error } = await SB.functions.invoke("send-certificate", {body: {to, name, subject: `Your ${what}`,
+    text: `Dear ${name},\n\nThank you for taking part in ${c.conf.name}. Your ${what} is attached as a PDF.\n\nBest regards,\nThe organising committee`,
+    workshops: [], event: c.conf.name, filename: fileName(name), pdf: await b64(await certPdf(c, [{...a, cert_name: name}]))}});
+  if (error || !data?.ok) { let msg = error?.message || "Not sent.", limit = false;
+    try { const j = await error.context.json(); msg = j.error || msg; limit = !!j.limit; } catch {} return {error: msg, limit}; }
+  const sent = {...(a.cert_sent || {}), [MAIN]: {at: new Date().toISOString(), email: to, name}};
+  await SB.from("attendees").update({cert_sent: sent}).eq("id", a.id); a.cert_sent = sent;
+  return {};
+}
+// One at a time, so a long list never trips Gmail; stops at Gmail's daily limit or when stop() says so.
+export async function emailMany(c, people, {onStep, stop} = {}){
+  let ok = 0; const bad = [];
+  for (const [i, a] of people.entries()) {
+    if (stop?.()) break;
+    onStep?.(i, people.length, a);
+    const r = await emailMain(c, a);
+    if (r.error) { bad.push(`${a.code} ${a.full_name}: ${r.error}`); if (r.limit) break; } else ok++;
+  }
+  return {ok, bad};
+}
+let mailing = null; // {stop}
+const cm = {who: ""};
 
 export async function render(el, c, ctx){
   clearTimeout(timer);
@@ -229,6 +261,7 @@ function draw(el, c, ctx){
       <div class="panel kpi"><span>Sent today</span><strong>${sentToday}</strong><small>${by("sent").length} sent in total</small></div>
       <div class="panel kpi"><span>Request form</span><strong style="font-size:22px">${conf.cert_form_open ? "Open" : "Closed"}</strong><small>${offered.size} workshop${offered.size === 1 ? "" : "s"} offered</small></div></div>
     ${layoutOk ? "" : `<div class="tip warn"><span class="tip-ic">${icon("alert")}</span><span><b>The certificate layout doesn't show the workshop name</b><small>Add the "Workshop / session" field in Badges &amp; certificates so each page says which workshop it is for.</small></span><a class="btn ghost small" href="#/c/${conf.id}/print">Open the designer</a></div>`}
+    ${mainPanel(c)}
     <div class="ov-grid">
       <section class="panel" style="display:grid;gap:12px">
         <div class="toolbar"><div class="seg" role="group" aria-label="Show">${[["pending", "Waiting"], ["sent", "Sent"], ["rejected", "Rejected"]].map(([k, l]) =>
@@ -252,7 +285,42 @@ function draw(el, c, ctx){
           <label>Subject<input id="cSubj" value="${esc(mailText().subject)}"></label><label>Message<textarea id="cBody" rows="7">${esc(mailText().body)}</textarea></label>
           <span class="note">{name} becomes the name on the certificate. The person's name is added to the start of the subject.</span></div></details>
       </div></div>`;
-  wire(el, c, ctx, list); wireSelf(el, c, ctx);
+  wire(el, c, ctx, list); wireSelf(el, c, ctx); wireMain(el, c, ctx);
+}
+const attendedAny = c => c.attendees.filter(a => c.checkinsByCode.has(a.code));
+function mainPool(c){
+  const who = cm.who || (attendedAny(c).length ? "attended" : "all");
+  const pool = who === "attended" ? attendedAny(c) : c.attendees;
+  return {who, pool, withMail: pool.filter(hasMail), sent: pool.filter(mainSent), left: pool.filter(a => hasMail(a) && !mainSent(a))};
+}
+function mainPanel(c){
+  const {who, pool, withMail, sent, left} = mainPool(c), pct = withMail.length ? Math.round(sent.filter(hasMail).length / withMail.length * 100) : 0;
+  return `<section class="panel cm-panel" id="cmPanel"><div class="cm-head"><div><h2>Certificates by email</h2>
+      <p class="note" style="margin:2px 0 0">Everyone gets their certificate of attendance (appreciation for the categories you chose) as a PDF, from the conference Gmail.</p></div>
+      <label class="cm-who">Send to<select id="cmWho"><option value="attended" ${who === "attended" ? "selected" : ""}>People who attended a session (${attendedAny(c).length})</option>
+        <option value="all" ${who === "all" ? "selected" : ""}>Everyone registered (${c.attendees.length})</option></select></label></div>
+    <div class="cm-stats"><div><b class="num">${pool.length}</b><span>in the list</span></div><div><b class="num">${withMail.length}</b><span>have an email</span></div>
+      <div class="ok"><b class="num">${sent.length}</b><span>sent</span></div><div class="go"><b class="num">${left.length}</b><span>left to send</span></div></div>
+    <div class="cm-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Sent so far"><i style="width:${pct}%"></i></div>
+    <div class="cm-acts"><button type="button" id="cmGo" ${left.length ? "" : "disabled"}>${icon("mail")}${left.length ? `Email ${left.length} certificate${left.length === 1 ? "" : "s"}` : "Everyone with an email has theirs"}</button>
+      <button type="button" class="ghost" id="cmStop" hidden>Stop</button>
+      <span class="note" id="cmNote">${pool.length - withMail.length ? `${pool.length - withMail.length} have no email: add one in Attendees, or they can use the "fix my details" QR.` : ""} Gmail sends about 500 a day.</span></div></section>`;
+}
+function wireMain(el, c, ctx){
+  const go = $("#cmGo", el), stop = $("#cmStop", el), note = $("#cmNote", el), bar = $(".cm-bar i", el);
+  $("#cmWho", el).onchange = e => { cm.who = e.target.value; draw(el, c, ctx); };
+  stop.onclick = () => { if (mailing) mailing.stopped = true; stop.disabled = true; stop.textContent = "Stopping…"; };
+  go.onclick = () => armed(go, async () => {
+    const {left, withMail, sent} = mainPool(c); if (!left.length) return;
+    mailing = {stopped: false}; go.disabled = true; stop.hidden = false; $("#cmWho", el).disabled = true;
+    const base = sent.filter(hasMail).length;
+    const r = await emailMany(c, left, {stop: () => mailing.stopped, onStep: (i, n, a) => {
+      note.textContent = `Sending ${i + 1} of ${n}: ${a.cert_name || a.full_name}…`; bar.style.width = Math.round((base + i) / withMail.length * 100) + "%"; }});
+    mailing = null;
+    toast(`${r.ok} certificate${r.ok === 1 ? "" : "s"} emailed${r.bad.length ? `, ${r.bad.length} not sent` : ""}`, r.bad.length ? "bad" : "");
+    await ctx.reload();
+    if (r.bad.length) setTimeout(() => { const n = $("#cmNote"); if (n) n.textContent = "Not sent: " + r.bad.slice(0, 5).join("; ") + (r.bad.length > 5 ? ` and ${r.bad.length - 5} more` : ""); }, 50);
+  });
 }
 /* ---------- self-service setup (team) ---------- */
 const selfOf = c => ({open: false, workshops: [], ...(c.conf.cert_self || {})});
@@ -261,7 +329,7 @@ const toSend = c => { const ws = selfOf(c).workshops;
   return c.attendees.map(a => ({a, todo: ws.filter(w => (a.tags || []).includes(w.tag) && !(a.cert_sent || {})[w.id])})).filter(x => x.todo.length); };
 const sentList = c => c.attendees.flatMap(a => Object.entries(a.cert_sent || {}).map(([wid, v]) => ({a, wid, ...v}))).sort((x, y) => String(y.at).localeCompare(String(x.at)));
 function selfPanel(c){
-  const cs = selfOf(c), sent = sentList(c), title = id => cs.workshops.find(w => w.id === id)?.title || "Removed workshop";
+  const cs = selfOf(c), sent = sentList(c), title = id => id === MAIN ? "Certificate of attendance" : cs.workshops.find(w => w.id === id)?.title || "Removed workshop";
   const count = w => c.attendees.filter(a => (a.tags || []).includes(w.tag)).length;
   return `<section class="panel form" id="msPanel"><div class="panel-head" style="margin:0"><h2>Certificate by badge ID</h2><span class="pill ${cs.open ? "ok live" : ""}">${cs.open ? "Open" : "Closed"}</span></div>
     <p class="note" style="margin:0">People scan the QR, type their badge ID, confirm their name, add an email if we don't have one, and get all their workshop certificates by email. They can send them again at any time.</p>

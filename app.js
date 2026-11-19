@@ -170,7 +170,7 @@ const daysTo = d => Math.round((dateObj(d) - dateObj(today())) / 864e5);
 const confStatus = c => { const t = today(); return t < c.start_date ? "upcoming" : t > c.end_date ? "ended" : "live"; };
 const statusPill = (c) => { const s = confStatus(c), n = daysTo(c.start_date), len = daysTo(c.end_date) - n + 1;
   return s === "live" ? `<span class="pill ok live">On now, day ${1 - n} of ${len}</span>` : s === "upcoming" ? `<span class="pill acc">${n === 1 ? "Tomorrow" : `In ${n} days`}</span>` : `<span class="pill">Ended</span>`; };
-let homeView = {f: "all", q: ""};
+let homeView = {f: "", q: ""}; // f empty: "On now" when a conference is running, else All
 async function renderHome(){
   const h = new Date().getHours(), hello = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
   app.innerHTML = shell({title: "Conferences", sub: `${hello}. ${new Date().toLocaleDateString("en-GB", {weekday: "long", day: "numeric", month: "long"})}`,
@@ -189,6 +189,7 @@ async function renderHome(){
   drawHome(confs, counts);
 }
 function drawHome(confs, counts){
+  if (!homeView.f) homeView.f = confs.some(c => confStatus(c) === "live") ? "live" : "all";
   const by = k => confs.filter(c => confStatus(c) === k).length;
   const list = confs.filter(c => (homeView.f === "all" || confStatus(c) === homeView.f) && (!homeView.q || `${c.name} ${c.venue}`.toLowerCase().includes(homeView.q.toLowerCase())));
   const live = confs.find(c => confStatus(c) === "live");

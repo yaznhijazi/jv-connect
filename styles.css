@@ -1035,3 +1035,19 @@ button.isl-who:hover .isl-txt b{text-decoration:underline;text-decoration-color:
 .ed-diff>div{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
 .ed-diff small{color:var(--muted);min-width:130px}
 .ed-diff s{color:var(--muted)}
+
+/* Certificates page: certificates by email */
+.cm-panel{display:grid;gap:14px;margin-bottom:20px}
+.cm-head{display:flex;gap:16px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
+.cm-who{min-width:260px}
+.cm-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.cm-stats>div{display:grid;gap:2px;padding:12px 14px;border-radius:var(--r);background:var(--surface-2);border:1px solid var(--line)}
+.cm-stats b{font:700 26px/1.1 var(--display)}
+.cm-stats span{font-size:12.5px;color:var(--muted)}
+.cm-stats .ok b{color:var(--ok)}
+.cm-stats .go b{color:var(--accent)}
+.cm-bar{height:8px;border-radius:999px;background:var(--line);overflow:hidden}
+.cm-bar i{display:block;height:100%;border-radius:inherit;background:var(--ok-solid);transition:width .4s}
+.cm-acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.cm-acts .note{flex:1 1 260px;margin:0}
+@media (max-width:700px){.cm-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}

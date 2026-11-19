@@ -3,6 +3,7 @@ import {SB, $, $$, esc, hm, dayShort, t5, money, initials, toast, dialog, armed,
   categoriesOf, countriesOf, selectOptions, today, startOf, endOf, state, icon, flag, countryPicker, can, store, tagsOf, tagsUsed, tagChip, cleanTag, loadConf} from "./core.js";
 import {printDocs, certPdf, certKind, workshopsOf} from "./print.js";
 import {badgeUrl} from "./register.js";
+import {emailMain, emailMany, mainSent, hasMail} from "./certs.js";
 import {formOf, questionInput, answersFrom} from "./regform.js";
 
 let syncT = null;
@@ -50,7 +51,7 @@ export function render(el, c, ctx){
     <div class="att-meta"><span>${list.length === c.attendees.length ? `${c.attendees.length} attendee${c.attendees.length === 1 ? "" : "s"}` : `${list.length} of ${c.attendees.length} shown`}</span>
       ${narrowed ? `<button type="button" class="linkish" id="aClear">Clear filters</button>` : ""}</div>
     ${sel.length ? `<div class="bulkbar"><span>${sel.length} selected</span><span style="flex:1"></span>
-      <button type="button" class="ghost small" data-bulk="badge">${icon("print")}Badges</button><button type="button" class="ghost small" data-bulk="badgetext" title="Only the names, for cards that already have the design">${icon("print")}Badges, text only</button><button type="button" class="ghost small" data-bulk="certificate">${icon("print")}Certificates</button>
+      <button type="button" class="ghost small" data-bulk="badge">${icon("print")}Badges</button><button type="button" class="ghost small" data-bulk="badgetext" title="Only the names, for cards that already have the design">${icon("print")}Badges, text only</button><button type="button" class="ghost small" data-bulk="certificate">${icon("print")}Certificates</button><button type="button" class="ghost small" data-bulk="mailcert">${icon("mail")}Email certificates</button>
       <button type="button" class="ghost small" data-bulk="tag">${icon("tag")}Tag</button><button type="button" class="ghost small" data-bulk="paid">Mark paid</button><button type="button" class="ghost small" data-bulk="unpaid">Mark not paid</button>
       <button type="button" class="danger small" data-bulk="delete">Delete</button><button type="button" class="ghost small" data-bulk="clear" aria-label="Clear selection">${icon("x")}</button></div>` : ""}
     <div class="tbl"><table class="rt att"><thead><tr><th class="sel"><input type="checkbox" id="aAll" aria-label="Select all shown" ${list.length && list.every(a => view.sel.has(a.id)) ? "checked" : ""}></th>
@@ -116,6 +117,12 @@ export function render(el, c, ctx){
     if (k === "badge" || k === "certificate") return printDocs(c, k, sel);
     if (k === "badgetext") return printDocs(c, "badge", sel, {full: false}); // pre-printed cards: no design, just the text
     if (k === "tag") return tagDialog(c, sel, ctx);
+    if (k === "mailcert") { const to = sel.filter(hasMail);
+      if (!to.length) return toast("None of them has an email.", "bad");
+      return armed(b, async () => { b.disabled = true;
+        const r = await emailMany(c, to, {onStep: (i, n) => { b.textContent = `Sending ${i + 1} of ${n}…`; }});
+        toast(`${r.ok} certificate${r.ok === 1 ? "" : "s"} emailed${to.length < sel.length ? `, ${sel.length - to.length} had no email` : ""}${r.bad.length ? `, ${r.bad.length} not sent` : ""}`, r.bad.length ? "bad" : "");
+        await ctx.reload(); }); }
     if (k === "paid" || k === "unpaid") { const { error } = await SB.from("attendees").update({fee_paid: k === "paid"}).in("id", ids); if (error) return toast(error.message, "bad"); toast(`${ids.length} marked ${k === "paid" ? "paid" : "not paid"}`); return ctx.reload(); }
     if (k === "delete") return armed(b, async () => { const { error } = await SB.from("attendees").delete().in("id", ids); if (error) return toast(error.message, "bad"); view.sel.clear(); toast(`${ids.length} deleted`); ctx.reload(); });
   });
@@ -224,7 +231,7 @@ function personDialog(c, a, ctx){
     body: `${a ? `<div class="p-head"><span class="av lg">${esc(initials(a.full_name))}</span><div style="min-width:0"><b>${esc(a.full_name)}</b>
         <div class="p-tags"><span class="pill acc num">ID ${esc(a.code)}</span>${a.category ? `<span class="pill">${esc(a.category)}</span>` : ""}
         ${Number(a.fee_amount) ? `<span class="pill ${a.fee_paid ? "ok" : "warn"}">${a.fee_paid ? "Paid" : "Not paid"} ${money(a.fee_amount)} JOD</span>` : ""}</div></div></div>
-      <div class="p-actions"><button type="button" class="ghost small" data-print="badge">${icon("print")}Badge</button><button type="button" class="ghost small" data-print="badge" data-text="1">${icon("print")}Badge, text only</button><button type="button" class="ghost small" data-print="certificate">${icon("print")}Certificate</button><button type="button" class="ghost small" data-pdf="badge">${icon("download")}Badge PDF</button><button type="button" class="ghost small" data-pdf="certificate">${icon("download")}Certificate PDF</button>${wsFor(c, a).length ? `<button type="button" class="ghost small" data-wspdf>${icon("download")}Workshop certificate${wsFor(c, a).length > 1 ? "s" : ""} PDF</button>` : ""}
+      <div class="p-actions"><button type="button" class="ghost small" data-print="badge">${icon("print")}Badge</button><button type="button" class="ghost small" data-print="badge" data-text="1">${icon("print")}Badge, text only</button><button type="button" class="ghost small" data-print="certificate" data-full="1">${icon("print")}Certificate</button><button type="button" class="ghost small" data-print="certificate" data-text="1" title="Only the text, for certificate paper that already has the design">${icon("print")}Certificate, text only</button><button type="button" class="ghost small" data-pdf="badge">${icon("download")}Badge PDF</button><button type="button" class="ghost small" data-pdf="certificate">${icon("download")}Certificate PDF</button>${hasMail(a) ? `<button type="button" class="ghost small" data-mailcert title="${mainSent(a) ? `Sent ${esc(dayShort(mainSent(a).at.slice(0, 10)))} to ${esc(mainSent(a).email)}` : `To ${esc(a.email)}`}">${icon("mail")}${mainSent(a) ? "Email certificate again" : "Email certificate"}</button>` : ""}${wsFor(c, a).length ? `<button type="button" class="ghost small" data-wspdf>${icon("download")}Workshop certificate${wsFor(c, a).length > 1 ? "s" : ""} PDF</button>` : ""}
         ${Number(a.fee_amount) ? `<button type="button" class="ghost small" data-paytoggle>${icon("money")}${a.fee_paid ? "Mark not paid" : "Mark paid"}</button>` : ""}</div>
       ${pickable.length ? `<div class="p-checkin"><select id="pSess" aria-label="Session">${pickable.slice(0, 60).map(s => `<option value="${s.id}">${rank(s) === 0 ? "Live: " : ""}${esc(dayShort(s.day))} ${t5(s.start_time)}, ${esc(s.title)}</option>`).join("")}</select>
         <button type="button" class="soft small" id="pCheck">${icon("check")}Check in</button></div>` : ""}` : ""}
@@ -272,7 +279,11 @@ function personDialog(c, a, ctx){
       await ctx.reload(); setTimeout(() => quickActions(state.c, state.c.attendees.find(x => x.id === made?.id) || {...row, ...made}, ctx), 50);
     },
     onDanger: async () => { const { error } = await SB.from("attendees").delete().eq("id", a.id); if (error) throw error; toast("Attendee deleted"); await ctx.reload(); }});
-  $$("[data-print]", d).forEach(b => b.onclick = () => printDocs(c, b.dataset.print, [a], b.dataset.text ? {full: false} : {}));
+  $$("[data-print]", d).forEach(b => b.onclick = () => printDocs(c, b.dataset.print, [a], b.dataset.text ? {full: false} : b.dataset.full ? {full: true} : {}));
+  $("[data-mailcert]", d) && ($("[data-mailcert]", d).onclick = async e => { const b = e.currentTarget; b.disabled = true; toast(`Emailing the certificate to ${a.email}…`);
+    const r = await emailMain(c, a); b.disabled = false;
+    if (r.error) return toast(r.error, "bad");
+    toast(`Certificate emailed to ${a.email}`); b.lastChild.textContent = "Email certificate again"; });
   // Digital copies: the badge, or the certificate (attendance or appreciation, by category), as a PDF file to send.
   $$("[data-pdf]", d).forEach(b => b.onclick = async () => {
     const badge = b.dataset.pdf === "badge"; b.disabled = true; toast("Making the PDF…");
