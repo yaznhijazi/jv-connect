@@ -3,6 +3,7 @@
 // You can also email everyone who attended a session in one go.
 import {SB, $, $$, esc, t5, hm, dayShort, dateRange, store, toast, armed, dialog, qrSvg, icon, initials, fetchAll, tagsOf} from "./core.js";
 import {certPdf, certShowsSession, workshopsOf, layoutFor, printFonts, certKind} from "./print.js";
+import {kioskPanel, wireKiosk} from "./kiosk.js";
 
 const formUrl = id => `${location.href.split("#")[0]}#/cert/${id}`;
 const EMAIL = /^[a-z0-9._%+'-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
@@ -271,6 +272,7 @@ function draw(el, c, ctx){
         <div class="tips" id="cList">${list.map(r => card(c, r)).join("") || `<div class="empty-state" style="padding:28px">${icon(ui.tab === "pending" ? "check" : "search", "ic lg")}<p style="margin:0">${q ? "Nobody matches." : ui.tab === "pending" ? (conf.cert_form_open ? "Nobody is waiting. New requests appear here by themselves." : "Nobody is waiting. Open the request form on the right so people can ask.") : "Nothing here yet."}</p></div>`}</div>
       </section>
       <div style="display:grid;gap:20px;align-content:start">
+        ${kioskPanel(c)}
         ${selfPanel(c)}
         <section class="panel form"><div class="panel-head" style="margin:0"><h2>Request form</h2><span class="pill ${conf.cert_form_open ? "ok live" : ""}">${conf.cert_form_open ? "Open" : "Closed"}</span></div>
           <div class="codes" style="justify-content:center"><div style="width:150px;height:150px">${qrSvg(formUrl(conf.id))}</div></div>
@@ -285,7 +287,7 @@ function draw(el, c, ctx){
           <label>Subject<input id="cSubj" value="${esc(mailText().subject)}"></label><label>Message<textarea id="cBody" rows="7">${esc(mailText().body)}</textarea></label>
           <span class="note">{name} becomes the name on the certificate. The person's name is added to the start of the subject.</span></div></details>
       </div></div>`;
-  wire(el, c, ctx, list); wireSelf(el, c, ctx); wireMain(el, c, ctx);
+  wire(el, c, ctx, list); wireSelf(el, c, ctx); wireMain(el, c, ctx); wireKiosk(el, c, ctx);
 }
 const attendedAny = c => c.attendees.filter(a => c.checkinsByCode.has(a.code));
 function mainPool(c){
