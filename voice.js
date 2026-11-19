@@ -65,6 +65,8 @@ export function byCode(people, code){
 }
 
 /* ---------- the panel ---------- */
+const SPK = `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>`;
+const SPK_OFF = `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>`;
 const MIC = `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`;
 let rec = null, listening = false;
 const lang = () => { try { return localStorage.getItem(LANG_KEY) || "ar-JO"; } catch { return "ar-JO"; } };
@@ -81,24 +83,43 @@ const FACES = {
 let faceT = 0, held = "idle";
 // Show a face for ms, or until another call; a held face (listening) comes back after a short one.
 function mood(face, ms = 0){
-  const f = $("#vcFace"); if (!f) return;
+  const fs = $$(".jd-face"); if (!fs.length) return;
   clearTimeout(faceT); if (!ms) held = face || "idle";
-  f.innerHTML = FACES[face || held]; f.dataset.face = face || held;
+  fs.forEach(f => { f.innerHTML = FACES[face || held]; f.dataset.face = face || held; });
   if (ms) faceT = setTimeout(() => mood(held), ms);
 }
-export const button = () => `<button type="button" class="vc-fab" id="vcFab" aria-label="Jovy, voice printing: print a badge or certificate" title="Jovy: say or type what to print">
+export const button = () => `<button type="button" class="vc-fab" id="vcFab" aria-label="Jovy, voice printing: print a badge or certificate" title="Jovy: say or type what to print (Alt+J)">
   <span class="vc-bot" id="vcBot"><img src="assets/mascots/jovy.webp" alt="" draggable="false">
-  <svg class="jd-face" id="vcFace" viewBox="0 0 100 80" aria-hidden="true">${FACES.idle}</svg></span></button>`;
+  <svg class="jd-face" id="vcFace" viewBox="0 0 100 80" aria-hidden="true">${FACES.idle}</svg></span></button>
+  ${tipOff() ? "" : `<div class="vc-tip" id="vcTip" role="note"><button type="button" class="vc-tip-x" id="vcTipX" aria-label="Close">✕</button>
+    <button type="button" class="vc-tip-t" id="vcTipGo"><b>Hi, I'm Jovy</b><span>Say or type “badge 3725” and I'll print it.</span></button></div>`}`;
+const TIP_KEY = "jv-jovy-tip", PREF_KEY = "jv-jovy-pref";
+const pref = (() => { try { return {kind: "badge", text: false, talk: true, ...JSON.parse(localStorage.getItem(PREF_KEY) || "{}")}; } catch { return {kind: "badge", text: false, talk: true}; } })();
+const savePref = () => { try { localStorage.setItem(PREF_KEY, JSON.stringify(pref)); } catch {} };
+const recent = []; // this session's prints, newest first, for "again"
+
+// Jovy answers out loud in the language you speak, if this computer has a voice for it.
+function talk(ar, en){
+  if (!pref.talk || !window.speechSynthesis) return;
+  const vs = speechSynthesis.getVoices(), arV = vs.find(v => /^ar/i.test(v.lang)), enV = vs.find(v => /^en/i.test(v.lang));
+  const useAr = lang() === "ar-JO" && arV, u = new SpeechSynthesisUtterance(useAr ? ar : en);
+  u.voice = useAr ? arV : enV || null; u.lang = useAr ? arV.lang : "en-US"; u.rate = 1.05;
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+function tipOff(){ try { return localStorage.getItem(TIP_KEY) === "off"; } catch { return false; } }
 
 let watching = false;
 export function wire(){
   const fab = $("#vcFab"); if (!fab) return;
   held = "idle";
+  $("#vcTipX") && ($("#vcTipX").onclick = () => { try { localStorage.setItem(TIP_KEY, "off"); } catch {} $("#vcTip")?.remove(); });
+  $("#vcTipGo") && ($("#vcTipGo").onclick = () => fab.click());
   fab.onclick = () => { if (!matchMedia("(prefers-reduced-motion: reduce)").matches) $("#vcBot")?.animate(
       [{transform: "scale(1,1)"}, {transform: "scale(1.1,.86)", offset: .18}, {transform: "scale(.95,1.08)", offset: .45}, {transform: "scale(1,1)"}], {duration: 420});
     $("#vc") ? close() : open(true); };
   if (watching) return;
   watching = true;
+  addEventListener("keydown", e => { if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyJ" && $("#vcFab")) { e.preventDefault(); $("#vc") ? close() : open(true); } });
   // The eyes lean toward the pointer, a few units at most, so the face stays on its screen.
   addEventListener("pointermove", e => {
     const f = $("#vcFace"), b = $("#vcFab"); if (!f || !b) return;
@@ -111,16 +132,27 @@ export function wire(){
 }
 
 function open(listen){
-  close();
+  close(); $("#vcTip")?.setAttribute("hidden", "");
   document.body.insertAdjacentHTML("beforeend", `<div class="vc" id="vc" role="dialog" aria-label="Voice printing">
-    <div class="vc-top"><span class="vc-t">Jovy · say or type what to print</span>
+    <div class="vc-top"><span class="vc-me"><img src="assets/mascots/jovy.webp" alt=""><svg class="jd-face" viewBox="0 0 100 80" aria-hidden="true">${FACES[held]}</svg></span>
+      <span class="vc-t"><b>Jovy</b>Say or type what to print</span>
+      <button type="button" class="vc-lang" id="vcTalk" aria-pressed="${pref.talk}" title="${pref.talk ? "Jovy answers out loud" : "Jovy is quiet"}">${pref.talk ? SPK : SPK_OFF}</button>
       ${SR ? `<button type="button" class="vc-lang" id="vcLang" title="Language you speak">${lang() === "ar-JO" ? "عربي" : "EN"}</button>` : ""}
       <button type="button" class="vc-x" id="vcX" aria-label="Close">✕</button></div>
+    <div class="vc-opts"><div class="vc-seg" role="group" aria-label="What to print when you don't say">
+        <button type="button" data-kind="badge" aria-pressed="${pref.kind === "badge"}">Badge</button><button type="button" data-kind="certificate" aria-pressed="${pref.kind === "certificate"}">Certificate</button></div>
+      <button type="button" class="vc-chip" id="vcText" aria-pressed="${pref.text}">Text only</button></div>
     <div class="vc-say" id="vcSay" dir="auto"><span class="vc-hint">"اطبع باجة محمد"<br>"شهادة رقم 3725"<br>"print badge 4012 text only"</span></div>
     <div class="vc-out" id="vcOut" role="status"></div>
+    <div class="vc-recent" id="vcRecent"></div>
     <form class="vc-row" id="vcForm"><input id="vcIn" dir="auto" autocomplete="off" placeholder="badge 3725, شهادة سما ساري" aria-label="Command">
       ${SR ? `<button type="button" class="vc-mic" id="vcMic" aria-label="Speak">${MIC}</button>` : ""}<button class="vc-go" aria-label="Run">↵</button></form></div>`);
   $("#vcX").onclick = close;
+  $$("[data-kind]").forEach(b => b.onclick = () => { pref.kind = b.dataset.kind; savePref(); $$("[data-kind]").forEach(x => x.setAttribute("aria-pressed", x === b)); });
+  $("#vcText").onclick = e => { pref.text = !pref.text; savePref(); e.currentTarget.setAttribute("aria-pressed", pref.text); };
+  $("#vcTalk").onclick = e => { pref.talk = !pref.talk; savePref(); const b = e.currentTarget; b.setAttribute("aria-pressed", pref.talk); b.innerHTML = pref.talk ? SPK : SPK_OFF;
+    b.title = pref.talk ? "Jovy answers out loud" : "Jovy is quiet"; if (!pref.talk) window.speechSynthesis?.cancel(); };
+  drawRecent();
   $("#vcForm").onsubmit = e => { e.preventDefault(); const v = $("#vcIn").value.trim(); if (v) { $("#vcSay").textContent = v; run([v]); $("#vcIn").value = ""; } };
   $("#vcMic") && ($("#vcMic").onclick = () => listening ? rec?.stop() : hear());
   $("#vcLang") && ($("#vcLang").onclick = () => { const n = lang() === "ar-JO" ? "en-US" : "ar-JO"; try { localStorage.setItem(LANG_KEY, n); } catch {} $("#vcLang").textContent = n === "ar-JO" ? "عربي" : "EN"; });
@@ -128,7 +160,7 @@ function open(listen){
   if (listen && SR) hear(); else $("#vcIn").focus();
 }
 const esc_ = e => { if (e.key === "Escape" && $("#vc")) { e.stopPropagation(); close(); } };
-function close(){ rec?.abort(); listening = false; $("#vc")?.remove(); $("#vcFab")?.classList.remove("on"); mood("idle"); document.removeEventListener("keydown", esc_, true); }
+function close(){ $("#vcTip")?.removeAttribute("hidden"); rec?.abort(); listening = false; $("#vc")?.remove(); $("#vcFab")?.classList.remove("on"); mood("idle"); document.removeEventListener("keydown", esc_, true); }
 
 function hear(){
   rec?.abort(); rec = new SR(); rec.lang = lang(); rec.interimResults = true; rec.maxAlternatives = 5;
@@ -150,7 +182,8 @@ function say(html, tone){ const o = $("#vcOut"); if (o) { o.className = `vc-out 
 function run(heard){
   const c = state.c; if (!c) return;
   for (const text of heard) {
-    const p = parse(text), kind = p.kind || "badge";
+    const p = parse(text), kind = p.kind || pref.kind;
+    if (p.full === undefined && pref.text) p.full = false;
     if (p.code) { const a = byCode(c.attendees, p.code); if (a) return go(c, kind, a, p.full); continue; }
     if (!p.name) continue;
     const found = findPeople(c.attendees, p.name);
@@ -158,17 +191,27 @@ function run(heard){
     if (found.length) return choose(c, kind, found.slice(0, 6), p.full, found.length);
   }
   const p = parse(heard[0] || "");
+  talk(p.code ? `ما في حدا رقمه ${p.code}` : "ما لقيت حدا بهالاسم، جرب الرقم", p.code ? `Nobody has ID ${p.code}` : "I couldn't find them. Try the ID.");
   say(`<p style="margin:0">${p.code ? `Nobody has ID <b>${esc(p.code)}</b>.` : p.name ? `Nobody called <b dir="auto">${esc(p.name)}</b>. Try the ID instead.` : "Say a name or an ID, for example “باجة 3725”."}</p>`, "bad");
 }
 
 function choose(c, kind, list, full, total){
   say(`<p class="vc-q">${total > list.length ? `${total} people match. The closest:` : "Which one?"}</p>${list.map(a => `<button type="button" class="vc-p" data-vp="${a.id}">
       <span class="vc-id num">${esc(a.code)}</span><span dir="auto"><b>${esc(a.full_name)}</b>${a.category ? `<small>${esc(a.category)}</small>` : ""}</span></button>`).join("")}`);
-  mood("wink", 1400);
+  mood("wink", 1400); talk(`في ${total} بهالاسم، اختار واحد`, `${total} people match. Pick one.`);
   $$("[data-vp]").forEach(b => b.onclick = () => go(c, kind, c.attendees.find(a => a.id === b.dataset.vp), full));
 }
 
+function drawRecent(){
+  const el = $("#vcRecent"); if (!el) return;
+  el.innerHTML = recent.length ? `<span class="vc-q">Printed just now</span>${recent.map((r, i) => `<button type="button" class="vc-again" data-again="${i}" title="Print again">
+      <span class="vc-id num">${esc(r.a.code)}</span><span dir="auto">${esc(r.a.full_name)}</span><small>${r.kind === "certificate" ? "Certificate" : "Badge"}${r.full === false ? ", text" : ""}</small><span class="vc-re" aria-hidden="true">↻</span></button>`).join("")}` : "";
+  $$("[data-again]", el).forEach(b => b.onclick = () => { const r = recent[b.dataset.again]; go(state.c, r.kind, r.a, r.full); });
+}
 function go(c, kind, a, full){
+  const i = recent.findIndex(r => r.a.id === a.id && r.kind === kind && r.full === full); if (i >= 0) recent.splice(i, 1);
+  recent.unshift({a, kind, full}); recent.length = Math.min(recent.length, 4); drawRecent();
+  talk(`تمام، ${kind === "certificate" ? "شهادة" : "باجة"} ${a.full_name} عالطابعة`, `Printing the ${kind === "certificate" ? "certificate" : "badge"} for ${a.full_name}`);
   say(`<p style="margin:0"><span class="vc-ok">✓</span> Printing the ${kind === "certificate" ? "certificate" : "badge"}${full === false ? ", text only" : full ? ", full design" : ""} for <b dir="auto">${esc(a.full_name)}</b> <span class="num">(${esc(a.code)})</span></p>`, "ok");
   printDocs(c, kind, [a], full === undefined ? {} : {full}).catch(e => toast(e.message, "bad"));
 }
