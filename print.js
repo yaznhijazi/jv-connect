@@ -159,6 +159,25 @@ export async function printDocs(c, kind, people, {test = false, sheet = false, e
 }
 addEventListener("afterprint", () => { $("#printArea").innerHTML = ""; });
 
+// Printer check: one page at the card's exact size. A frame on the edge, a 50 mm square and the word ONCE in the middle
+// show at a glance whether the printer shrinks the page (square under 50 mm), cuts it (frame missing) or doubles it (two per card).
+export function printCheck(L){
+  const style = document.getElementById("pageStyle") || document.head.appendChild(Object.assign(document.createElement("style"), {id: "pageStyle"}));
+  style.textContent = `@page{size:${L.w}mm ${L.h}mm;margin:0}`;
+  const tick = (n, axis) => Array.from({length: Math.floor(n / 10) + 1}, (_, i) => axis === "x"
+    ? `<i style="position:absolute;left:${i * 10}mm;top:0;width:.2mm;height:${i % 5 ? 2.5 : 5}mm;background:#000"></i>`
+    : `<i style="position:absolute;top:${i * 10}mm;left:0;height:.2mm;width:${i % 5 ? 2.5 : 5}mm;background:#000"></i>`).join("");
+  const sq = Math.min(50, L.w - 16, L.h - 40), t = (y, s, w, txt) => `<div style="position:absolute;left:0;right:0;top:${y}mm;text-align:center;font:${w} ${s}pt/1.25 'Instrument Sans',Arial,sans-serif">${txt}</div>`;
+  $("#printArea").innerHTML = `<div class="print-page" style="width:${L.w}mm;height:${L.h}mm;color:#000">
+    <div style="position:absolute;inset:0;border:.5mm solid #000"></div>${tick(L.w, "x")}${tick(L.h, "y")}
+    ${t(7, 9, 700, "TOP")}${t(L.h - 9, 9, 700, "BOTTOM")}
+    ${t(14, 7.5, 400, `This page is ${L.w} × ${L.h} mm. It should come out once, full size, on one card.`)}
+    <div style="position:absolute;left:${(L.w - sq) / 2}mm;top:${(L.h - sq) / 2 - 6}mm;width:${sq}mm;height:${sq}mm;border:.4mm solid #000;display:grid;place-items:center;text-align:center;font:400 7pt/1.3 Arial,sans-serif">
+      <div><b style="font:800 22pt/1 'Instrument Sans',Arial,sans-serif;letter-spacing:.06em">ONCE</b><br>Square: ${sq} mm each side</div></div>
+    ${t((L.h + sq) / 2 - 2, 7, 400, "Two pages on one card, or ONCE twice: set Pages per sheet to 1 and turn off two-sided.<br>Square smaller than " + sq + " mm: set Scale to 100% (not Fit).<br>Frame or TOP/BOTTOM missing: set Paper to " + L.w + " × " + L.h + " mm and Margins to None.")}</div>`;
+  setTimeout(() => print(), 150);
+}
+
 /* ---------- design files: a print-ready PDF (or image) from the designer becomes the page background ---------- */
 const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js", PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 const MM = 25.4 / 72;
@@ -243,7 +262,7 @@ export function render(el, c, ctx){
       <textarea id="pIds" hidden placeholder="0427 3815 1200, or a range: 0001-0100" aria-label="IDs or ranges to print"></textarea>
       ${perSheet(L).n > 1 ? `<label>Paper<select id="pSheet"><option value="one">One per page (${L.w} × ${L.h} mm)</option><option value="a4">${perSheet(L).n} per A4 sheet, with cut lines</option></select></label>` : ""}
       <button type="button" class="big-btn" id="pPrint">Print</button>
-      <div class="row"><button type="button" class="ghost" id="pTest">Test print one</button><button type="button" class="ghost" id="pPdf">${icon("download")}Download as PDF</button></div>
+      <div class="row"><button type="button" class="ghost" id="pTest">Test print one</button><button type="button" class="ghost" id="pCheck" title="One page that shows whether the printer shrinks, cuts or doubles the ${noun}">Printer check</button><button type="button" class="ghost" id="pPdf">${icon("download")}Download as PDF</button></div>
       <p class="note" style="margin:0" id="pPdfNote">Download makes one PDF with the full design, to send by email or WhatsApp.</p></div>`;
 
   const editTab = `<div class="panel form"><h3>Design</h3>
@@ -353,6 +372,7 @@ export function render(el, c, ctx){
     $("#pIds").oninput = count; $("#pSheet") && ($("#pSheet").onchange = count); count();
     $("#pPrint").onclick = () => withUnsaved(() => printDocs(c, ui.kind, pick(), {sheet: $("#pSheet")?.value === "a4", exact: true, full}));
     $("#pTest").onclick = () => withUnsaved(() => printDocs(c, ui.kind, [sample], {test: true, exact: true, full}));
+    $("#pCheck").onclick = () => printCheck(L);
     $("#pPdf").onclick = async () => {
       const people = pick(), b = $("#pPdf"), note = $("#pPdfNote"); if (!people.length) return;
       if (people.length > 150) toast(`${people.length} pages take a few minutes. Keep this page open.`);
