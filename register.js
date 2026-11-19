@@ -5,7 +5,7 @@ import {nextCode} from "./attendees.js";
 import {printDocs} from "./print.js";
 import {STD, formOf, questionInput, answersFrom, answersList, editForm} from "./regform.js";
 
-const waited = iso => { const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 6e4));
+export const waited = iso => { const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 6e4));
   return m < 1 ? "Just now" : m < 60 ? `${m} min` : m < 24 * 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${dayShort(iso.slice(0, 10))} ${hm(iso)}`; };
 const regUrl = id => `${location.href.split("#")[0]}#/register/${id}`;
 const digits = s => String(s || "").replace(/\D/g, "").slice(-8);
@@ -99,13 +99,13 @@ async function showStatus(pg, head, confId, id){
 }
 
 /* ---------- admin: the approval queue ---------- */
-const dupOf = (c, r) => c.attendees.find(a => (digits(r.phone).length >= 7 && digits(a.phone) === digits(r.phone)) || (r.email && a.email && a.email.toLowerCase() === r.email.toLowerCase())
+export const dupOf = (c, r) => c.attendees.find(a => (digits(r.phone).length >= 7 && digits(a.phone) === digits(r.phone)) || (r.email && a.email && a.email.toLowerCase() === r.email.toLowerCase())
   || a.full_name.trim().toLowerCase() === r.full_name.trim().toLowerCase());
 const row = (r, code) => ({conference_id: r.conference_id, code, full_name: r.full_name, cert_name: r.cert_name, phone: r.phone, email: r.email,
   category: r.category, entity: r.entity, country: r.country, fee_amount: 0, fee_paid: false, fee_note: "Self-registered", ...(r.answers && Object.keys(r.answers).length ? {answers: r.answers} : {})});
 // Yes/no questions can tag the person ("Will you attend the workshop?" Yes → Workshop).
 const autoTags = (c, r) => formOf(c.conf).questions.filter(q => q.type === "yesno" && q.tag_on_yes && (r.answers || {})[q.id] === "Yes").map(q => q.tag_on_yes.trim()).filter(Boolean);
-async function approve(c, list, ctx, {print = false} = {}){
+export async function approve(c, list, ctx, {print = false} = {}){
   let n = Number(nextCode(c));
   const rows = list.map(r => { const x = row(r, r.code || String(n++).padStart(4, "0")), t = autoTags(c, r); if (t.length) x.tags = [...new Set(t)]; return x; });
   const { data: made, error } = await SB.from("attendees").insert(rows).select("*");
@@ -117,7 +117,7 @@ async function approve(c, list, ctx, {print = false} = {}){
   await ctx.reload();
 }
 // Check a request before it goes in: every detail can be corrected, then approve (and print) or reject.
-function review(c, r, ctx){
+export function review(c, r, ctx){
   const d = dupOf(c, r), cats = categoriesOf(c), form = formOf(c.conf);
   const dl = dialog({drawer: true, need: "edit", title: "Check and approve", submit: "Approve", danger: "Reject",
     body: `<p class="note" style="margin:0">Sent ${esc(dayShort(r.created_at.slice(0, 10)))} at ${hm(r.created_at)}. Correct anything that's wrong; what you approve is what goes into the system and onto the badge.</p>

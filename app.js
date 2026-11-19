@@ -6,6 +6,7 @@ import * as printPage from "./print.js";
 import * as reportsPage from "./reports.js";
 import * as registerPage from "./register.js";
 import * as certsPage from "./certs.js";
+import * as island from "./island.js";
 
 const app = $("#app");
 // [route, label, icon, one-line purpose shown under the page title]
@@ -112,6 +113,7 @@ let routeN = 0; // bumps on every navigation, so a slow page that finishes late 
 async function route(){
   clearInterval(refreshT); refreshT = null; const my = ++routeN;
   const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+  if (parts[0] !== "c") island.stop(); // the new-registration island lives only inside a conference
   try {
     if (parts[0] === "scan" && parts[1]) return await scanPage.renderPublic(app, parts[1]);       // ushers, no login
     if (parts[0] === "voucher" && parts[1]) return await scanPage.renderVoucherPublic(app, parts[1]); // dinner staff, no login
@@ -251,6 +253,8 @@ async function renderConf(id, page){
     attendees: attendeesPage.render, register: registerPage.render, certs: certsPage.render, scan: scanPage.renderAdmin, vouchers: scanPage.renderVouchers, print: printPage.render, reports: reportsPage.render};
   curCtx = {reload: async () => { await loadConf(id, {force: true}); return route(); }};
   await pages[page](el, c, curCtx);
+  // A decision on the island refreshes the data; the page redraws unless a form is open on it.
+  island.watch(id, {reload: async () => { await loadConf(id, {force: true}); setTimeout(() => { if (!$("dialog[open]")) route(); }, 400); }});
   if (my !== routeN) return;
   if (pending) { const fn = pending; pending = null; fn(); }
   // Live pages refresh quietly so counts follow the doors.
