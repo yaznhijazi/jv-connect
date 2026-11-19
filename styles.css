@@ -1244,3 +1244,27 @@ button.ks-q{padding-inline-end:72px}
 .ks-ask.warn .ic{color:var(--warn)}
 .ks-fix{justify-self:stretch;margin-top:-6px;min-height:48px;border-radius:14px;border:1.5px dashed var(--line-2);background:transparent;color:var(--accent);font-size:15px;font-weight:600}
 .ks-fix:hover{border-color:var(--sky);background:var(--accent-soft)}
+
+/* digital (email only): an envelope that pulses while sending */
+.ks-env{width:110px;height:110px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent)}
+.ks-env .ic{width:46px;height:46px}
+.ks-env.busy{animation:ks-pulse 1.2s ease-in-out infinite}
+.ks-env.done{background:var(--ok-solid);color:#fff;animation:ks-pop .5s cubic-bezier(.3,1.6,.5,1)}
+.ks-mail .ks-status b{color:var(--fg)}
+.ks-mail.done .ks-status b{color:var(--ok)}
+
+/* one certificate QR: the ways out, and the team's switches */
+.ks-outs{display:grid;gap:10px}
+.ks-outs.two{grid-template-columns:1fr 1fr}
+.ks-go.mail{background:linear-gradient(180deg,var(--navy),var(--navy-3))}
+@media (max-width:520px){.ks-outs.two{grid-template-columns:1fr}}
+.ksp-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ksp-opt{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:var(--r);border:2px solid var(--line);cursor:pointer;background:var(--surface)}
+.ksp-opt.on{border-color:var(--ok-solid);background:color-mix(in srgb,var(--ok-bg) 60%,var(--surface))}
+.ksp-opt input{margin-top:3px}
+.ksp-opt span{display:grid;gap:2px}
+.ksp-opt b{display:flex;gap:6px;align-items:center;font-size:14px}
+.ksp-opt span>.ic{display:none}
+.ksp-opt small{font-size:12.5px;color:var(--muted)}
+.ksp-print{display:grid;gap:10px;padding:12px;border-radius:var(--r);background:var(--surface-2);border:1px solid var(--line)}
+@media (max-width:700px){.ksp-opts{grid-template-columns:1fr}}

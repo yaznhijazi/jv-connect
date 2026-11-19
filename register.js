@@ -247,7 +247,7 @@ export function render(el, c, ctx){
     if (count !== regs.length) ctx.reload(); }, 15000);
 }
 // A4 sign for the registration desk, in English and Arabic.
-function printSign(c, url, {title = "Scan to register<br>for your badge", ar = "امسح الرمز للتسجيل", sub = "Open your phone camera and point it at the code. Fill in your details; your badge ID appears once the desk approves it."} = {}){
+export function printSign(c, url, {title = "Scan to register<br>for your badge", ar = "امسح الرمز للتسجيل", sub = "Open your phone camera and point it at the code. Fill in your details; your badge ID appears once the desk approves it."} = {}){
   const style = document.getElementById("pageStyle") || document.head.appendChild(Object.assign(document.createElement("style"), {id: "pageStyle"}));
   style.textContent = "@page{size:210mm 297mm;margin:0}";
   $("#printArea").innerHTML = `<div class="print-page" style="width:210mm;height:297mm;display:grid;justify-items:center;align-content:center;gap:9mm;text-align:center;font-family:'Bricolage Grotesque','Cairo',sans-serif;color:#002a3d;padding:20mm">

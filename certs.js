@@ -509,8 +509,11 @@ function pickDialog(c, ctx, thenOpen){
   }
 }
 // A4 sign for the tables, English and Arabic.
-async function wsSign(c, url){
-  const L = layoutFor(c, "workshop"), navy = "#1d2556", amber = "#b4652a";
+// A4 table sign in the certificate's own look: its banner on top, a big QR, three steps. Used for every certificate QR.
+export async function tableSign(c, url, {kind = "workshop", title = "Get your<br>workshop certificates", ar = "احصل على شهادات ورش العمل",
+    steps = ["Scan with your phone camera", "Type the ID printed on your badge", "Confirm your name: your certificates arrive by email"],
+    arLine = "امسح الرمز، اكتب رقم بطاقتك، وأكّد اسمك لتصلك الشهادات على بريدك الإلكتروني."} = {}){
+  const L = layoutFor(c, kind), navy = "#1d2556", amber = "#b4652a";
   await printFonts();
   const style = document.getElementById("pageStyle") || document.head.appendChild(Object.assign(document.createElement("style"), {id: "pageStyle"}));
   style.textContent = "@page{size:210mm 297mm;margin:0}";
@@ -520,18 +523,18 @@ async function wsSign(c, url){
   $("#printArea").innerHTML = `<div class="print-page" style="width:210mm;height:297mm;display:grid;grid-template-rows:auto 1fr auto;justify-items:center;text-align:center;color:${navy};font-family:'Plus Jakarta Sans','Cairo',sans-serif;overflow:hidden">
     ${top}
     <div style="display:grid;justify-items:center;align-content:center;gap:6mm;padding:4mm 18mm">
-      <div style="font-family:'Playfair Display',serif;font-size:36pt;font-weight:700;line-height:1.05">Get your<br>workshop certificates</div>
-      <div dir="rtl" style="font-family:Amiri,Cairo,serif;font-size:24pt;font-weight:700">احصل على شهادات ورش العمل</div>
+      <div style="font-family:'Playfair Display',serif;font-size:36pt;font-weight:700;line-height:1.05">${title}</div>
+      <div dir="rtl" style="font-family:Amiri,Cairo,serif;font-size:24pt;font-weight:700">${ar}</div>
       <div style="width:92mm;height:92mm;padding:5mm;border:1.4mm solid ${navy};border-radius:6mm;box-shadow:0 0 0 1.6mm #fff,0 0 0 2.4mm ${amber}">${qrSvg(url)}</div>
-      <div style="font-size:14pt;line-height:1.6;text-align:left"><b>1.</b> Scan with your phone camera<br><b>2.</b> Type the ID printed on your badge<br><b>3.</b> Confirm your name: your certificates arrive by email</div>
-      <div dir="rtl" style="font-family:Cairo,sans-serif;font-size:13pt;max-width:165mm">امسح الرمز، اكتب رقم بطاقتك، وأكّد اسمك لتصلك الشهادات على بريدك الإلكتروني.</div></div>
+      <div style="font-size:14pt;line-height:1.6;text-align:left">${steps.map((s, i) => `<b>${i + 1}.</b> ${s}`).join("<br>")}</div>
+      <div dir="rtl" style="font-family:Cairo,sans-serif;font-size:13pt;max-width:165mm">${arLine}</div></div>
     <div style="width:210mm;padding:5mm 0 7mm;border-top:1.2mm solid ${amber};font-size:10.5pt;color:${navy}">${esc(c.conf.name)}</div></div>`;
   await Promise.all($$("#printArea img").map(i => i.complete ? 0 : new Promise(r => i.onload = i.onerror = r)));
   if (L.bg) await new Promise(r => { const im = new Image(); im.onload = im.onerror = r; im.src = L.bg; });
   setTimeout(() => print(), 150);
 }
 function printSign(c, url = formUrl(c.conf.id), self = false){
-  if (self) return wsSign(c, url);
+  if (self) return tableSign(c, url);
   const style = document.getElementById("pageStyle") || document.head.appendChild(Object.assign(document.createElement("style"), {id: "pageStyle"}));
   style.textContent = "@page{size:210mm 297mm;margin:0}";
   $("#printArea").innerHTML = `<div class="print-page" style="width:210mm;height:297mm;display:grid;justify-items:center;align-content:center;gap:8mm;text-align:center;font-family:'Bricolage Grotesque','Cairo',sans-serif;color:#002a3d;padding:20mm">

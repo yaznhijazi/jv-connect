@@ -4,6 +4,7 @@
 // (Chrome started with --kiosk-printing). Three stations share one queue; each job goes to whichever is free.
 import {SB, $, $$, esc, dateRange, icon, toast, armed, qrSvg, store, state, loadConf, initials, dayShort, hm, dialog, can} from "./core.js";
 import {printDocs, printFonts, certPdf} from "./print.js";
+import {tableSign} from "./certs.js";
 
 const base = () => location.href.split("#")[0];
 export const kioskUrl = id => `${base()}#/printcert/${id}`;
@@ -15,9 +16,9 @@ const clean = s => String(s || "").replace(/[​-‏‪-‮⁠-⁩﻿ ]/g, "").
 /* ---------- kiosk ----------
    One language at a time (English or Arabic, a tap in the corner), three clear steps, big touch targets.
    It goes back to the start by itself, so a tablet on a stand serves one person after another. */
-export async function renderKiosk(app, confId, mode = "print"){
-  const digital = mode === "digital";
-  const { data: f } = await SB.rpc(digital ? "c_digital_info" : "c_reg_info", {p_conf: confId});
+export async function renderKiosk(app, confId){
+  const { data: f } = await SB.rpc("c_digital_info", {p_conf: confId});
+  const modes = {print: !!f?.print, email: !!f?.email}, digital = modes.email && !modes.print; // digital: email is the only way out
   let lang = store.get("ksLang") || "en";
   const T = (en, ar) => lang === "ar" ? ar : en;
   let resetT = null, pollT = null; const later = (fn, ms) => { clearTimeout(resetT); resetT = setTimeout(fn, ms); };
@@ -26,18 +27,18 @@ export async function renderKiosk(app, confId, mode = "print"){
     app.innerHTML = `<main class="ks" dir="${lang === "ar" ? "rtl" : "ltr"}" lang="${lang}"><header class="ks-bar"><img src="assets/jv-mark.svg" alt="" width="14" height="24">
         <span class="ks-ev"><b dir="auto">${esc(f?.name || "")}</b>${f ? `<small dir="ltr">${esc(dateRange(f.start_date, f.end_date))}${f.venue ? " · " + esc(f.venue) : ""}</small>` : ""}</span>
         <button type="button" class="ks-lang" id="ksLang" lang="${lang === "ar" ? "en" : "ar"}">${lang === "ar" ? "English" : "عربي"}</button></header>
-      <div class="ks-stage">${step ? `<ol class="ks-steps" aria-label="${T("Steps", "الخطوات")}">${[T("Badge ID", "رقم البطاقة"), T("Check", "التأكيد"), digital ? T("Certificate", "الشهادة") : T("Print", "الطباعة")].map((l, i) =>
+      <div class="ks-stage">${step ? `<ol class="ks-steps" aria-label="${T("Steps", "الخطوات")}">${[T("Badge ID", "رقم البطاقة"), T("Check", "التأكيد"), T("Certificate", "الشهادة")].map((l, i) =>
         `<li class="${i + 1 < step ? "done" : i + 1 === step ? "on" : ""}" ${i + 1 === step ? 'aria-current="step"' : ""}><span>${i + 1 < step ? icon("check", "ic sm") : i + 1}</span>${l}</li>`).join("")}</ol>` : ""}
         <div class="ks-card">${inner}</div></div></main>`;
     $("#ksLang").onclick = () => { lang = lang === "ar" ? "en" : "ar"; store.set("ksLang", lang); view(); };
   };
-  const closed = () => { view = closed; clearTimeout(resetT); frame(0, `<div class="ks-center">${icon("clock", "ic lg")}<h1>${digital ? T("Certificates aren't available yet", "الشهادات غير متاحة بعد") : T("Self-print isn't open right now", "الطباعة الذاتية غير متاحة الآن")}</h1>
+  const closed = () => { view = closed; clearTimeout(resetT); frame(0, `<div class="ks-center">${icon("clock", "ic lg")}<h1>${T("Certificates aren't available right now", "الشهادات غير متاحة الآن")}</h1>
     <p class="ks-sub">${T("Please ask at the registration desk.", "يرجى السؤال في مكتب التسجيل.")}</p></div>`); };
 
   // 1. Badge ID on a big keypad; the digits show large as they are typed.
   const askId = (msg = "", code = "") => {
     view = () => askId(msg, $("#ksCode")?.value || code); clearTimeout(resetT); clearInterval(pollT);
-    frame(1, `<form id="ksId" novalidate><h1>${digital ? T("Get your certificate", "احصل على شهادتك") : T("Print your certificate", "اطبع شهادتك")}</h1>
+    frame(1, `<form id="ksId" novalidate><h1>${T("Get your certificate", "احصل على شهادتك")}</h1>
       <p class="ks-sub">${T("Type the ID printed on your badge.", "اكتب الرقم المطبوع على بطاقتك.")}</p>
       <input id="ksCode" class="ks-code" inputmode="numeric" autocomplete="off" maxlength="10" dir="ltr" aria-label="${T("Badge ID", "رقم البطاقة")}" placeholder="—" value="${esc(code)}">
       <div class="ks-pad" dir="ltr">${[1, 2, 3, 4, 5, 6, 7, 8, 9, "C", 0, "⌫"].map(k => `<button type="button" data-k="${k}" class="${typeof k === "string" ? "fn" : ""}" aria-label="${k === "⌫" ? T("Delete", "حذف") : k === "C" ? T("Clear", "مسح") : k}">${k === "⌫" ? "⌫" : k === "C" ? T("Clear", "مسح") : k}</button>`).join("")}</div>
@@ -48,7 +49,7 @@ export async function renderKiosk(app, confId, mode = "print"){
     $$("[data-k]", form).forEach(b => b.onclick = () => { const k = b.dataset.k; inp.value = k === "⌫" ? inp.value.slice(0, -1) : k === "C" ? "" : (inp.value + k).slice(0, 10); sync(); inp.focus(); });
     form.onsubmit = async e => { e.preventDefault(); const v = clean(inp.value); if (!v) return;
       go.disabled = true; go.classList.add("wait");
-      const { data: p, error } = await SB.rpc(digital ? "c_digital_lookup" : "c_kiosk_lookup", {p_conf: confId, p_code: v});
+      const { data: p, error } = await SB.rpc("c_kiosk_lookup", {p_conf: confId, p_code: v});
       if (error) return askId(T("No connection. Try again.", "لا يوجد اتصال. حاول مرة أخرى."), v);
       if (p.closed) return closed();
       if (!p.found) return askId(T("No one has this ID. Check the number on your badge.", "لا يوجد أحد بهذا الرقم. تأكد من الرقم على بطاقتك."), v);
@@ -69,14 +70,15 @@ export async function renderKiosk(app, confId, mode = "print"){
           <button type="button" class="ks-q ${st.nameOk ? "ok" : ""}" id="ksNameOk" aria-pressed="${st.nameOk}"><span class="ks-ql">${T("Name on the certificate", "الاسم على الشهادة")}</span>
           <span class="ks-big" dir="auto">${esc(st.name)}</span><span class="ks-tick">${icon("check")}</span><span class="ks-tap">${st.nameOk ? T("Confirmed", "تم التأكيد") : T("Tap if it's right", "اضغط إذا كان صحيحًا")}</span></button>
           <button type="button" class="ks-fix" id="ksNameEdit">${T("Wrong spelling or missing title? Edit the name", "خطأ في الاسم أو اللقب؟ عدّل الاسم")}</button>`}
-      ${st.editMail ? `${p.email_hint ? "" : `<p class="ks-ask warn">${icon("mail", "ic sm")}${T("We don't have an email for you. Add it so we can send you your certificate.", "لا يوجد لدينا بريدك الإلكتروني. أضفه لنرسل لك شهادتك.")}</p>`}
+      ${st.editMail ? `${p.email_hint ? "" : `<p class="ks-ask warn">${icon("mail", "ic sm")}${digital ? T("We don't have an email for you. Add it to receive your certificate.", "لا يوجد لدينا بريدك الإلكتروني. أضفه لتصلك شهادتك.") : T("We don't have an email for you. Add it so we can send you your certificate.", "لا يوجد لدينا بريدك الإلكتروني. أضفه لنرسل لك شهادتك.")}</p>`}
           <div class="ks-q edit"><span class="ks-ql">${T("Email", "البريد الإلكتروني")}</span>
           <input id="ksMail" class="ks-in" type="email" inputmode="email" dir="ltr" maxlength="200" value="${esc(st.email)}" placeholder="name@example.com">
-          <span class="ks-hint">${p.email_hint ? T("The desk checks a new email before it replaces the old one.", "سيتحقق المكتب من البريد الجديد قبل اعتماده.") : T("You can leave it empty and add it later at the desk.", "يمكنك تركه فارغًا وإضافته لاحقًا في المكتب.")}</span></div>`
+          <span class="ks-hint">${p.email_hint ? T("The desk checks a new email before it replaces the old one.", "سيتحقق المكتب من البريد الجديد قبل اعتماده.") : (digital ? T("Your certificate is sent to this email.", "ستصل شهادتك إلى هذا البريد.") : modes.email ? T("Needed only to get it by email.", "مطلوب فقط لاستلامها بالبريد.") : T("You can leave it empty and add it later at the desk.", "يمكنك تركه فارغًا وإضافته لاحقًا في المكتب."))}</span></div>`
         : `<button type="button" class="ks-q ${st.mailOk ? "ok" : ""}" id="ksMailOk" aria-pressed="${st.mailOk}"><span class="ks-ql">${T("Email", "البريد الإلكتروني")}</span>
           <span class="ks-big small" dir="ltr">${esc(p.email_hint)}</span><span class="ks-tick">${icon("check")}</span><span class="ks-tap">${st.mailOk ? T("Confirmed", "تم التأكيد") : T("Tap if it's right", "اضغط إذا كان صحيحًا")}</span></button>
           <button type="button" class="ks-edit" id="ksMailEdit">${T("Use a different email", "استخدم بريدًا آخر")}</button>`}
-      <button type="button" class="ks-go print" id="ksPrint" ${ready ? "" : "disabled"}>${digital ? icon("award") + T("Show my certificate", "اعرض شهادتي") : icon("print") + T("Print my certificate", "اطبع شهادتي")}</button>
+      <div class="ks-outs ${modes.print && modes.email ? "two" : ""}">${modes.print ? `<button type="button" class="ks-go print" id="ksPrint" ${ready ? "" : "disabled"}>${icon("print")}${T("Print at the desk", "اطبعها على المكتب")}</button>` : ""}
+        ${modes.email ? `<button type="button" class="ks-go ${modes.print ? "mail" : "print"}" id="ksEmail" ${ready ? "" : "disabled"}>${icon("mail")}${modes.print ? T("Send by email", "أرسلها بالبريد") : T("Email my certificate", "أرسل شهادتي لبريدي")}</button>` : ""}</div>
       <p class="ks-err" role="status">${ready || st.editName ? "" : !st.nameOk ? T("Confirm your name to continue.", "أكّد اسمك للمتابعة.") : T("Confirm your email, or use a different one.", "أكّد بريدك الإلكتروني أو استخدم بريدًا آخر.")}</p>`);
     const set = patch => confirm(p, {...st, ...patch});
     $("#ksBack").onclick = () => askId();
@@ -87,30 +89,36 @@ export async function renderKiosk(app, confId, mode = "print"){
     $("#ksMailEdit") && ($("#ksMailEdit").onclick = () => set({editMail: true, mailOk: false}));
     $("#ksMail") && ($("#ksMail").oninput = e => { st.email = e.target.value; });
     $("#ksName")?.focus();
-    $("#ksPrint").onclick = async () => {
-      const email = $("#ksMail") ? clean($("#ksMail").value).toLowerCase() : "";
-      if (email && !EMAIL.test(email)) return $(".ks-err").textContent = T("That email doesn't look right.", "البريد الإلكتروني غير صحيح.");
-      if (digital) {
-        if (st.name !== p.name) {
-          $("#ksPrint").disabled = true;
-          const { data } = await SB.rpc("c_digital_name", {p_conf: confId, p_code: p.code, p_name: st.name});
-          if (data?.status === "review") return review(p, st.name, data.registered);
-          if (data?.status === "closed") return closed();
-        }
-        return show(p, st.name, email);
+    const email = () => $("#ksMail") ? clean($("#ksMail").value).toLowerCase() : "";
+    const bad = () => { const e = email(); if (e && !EMAIL.test(e)) { $(".ks-err").textContent = T("That email doesn't look right.", "البريد الإلكتروني غير صحيح."); return true; } };
+    const busy = on => $$(".ks-outs button").forEach(x => { x.disabled = on; x.classList.toggle("wait", on); });
+    $("#ksEmail") && ($("#ksEmail").onclick = async () => {
+      if (bad()) return;
+      const e = email();
+      if (!e && !p.email_hint) return $(".ks-err").textContent = T("Add your email to receive your certificate.", "أضف بريدك الإلكتروني لتصلك الشهادة.");
+      if (st.editMail && !e && p.email_hint) return $(".ks-err").textContent = T("Type the new email, or keep the one we have.", "اكتب البريد الجديد أو أبقِ البريد الحالي.");
+      if (st.name !== p.name) {
+        busy(true);
+        const { data } = await SB.rpc("c_digital_name", {p_conf: confId, p_code: p.code, p_name: st.name});
+        if (data?.status === "review") return review(p, st.name, data.registered);
+        if (data?.status === "closed") return closed();
       }
-      $("#ksPrint").disabled = true; $("#ksPrint").classList.add("wait");
-      const { data, error } = await SB.rpc("c_kiosk_print", {p_conf: confId, p_code: p.code, p_name: st.name, p_email: email});
+      return show(p, st.name, e);
+    });
+    $("#ksPrint") && ($("#ksPrint").onclick = async () => {
+      if (bad()) return;
+      busy(true);
+      const { data, error } = await SB.rpc("c_kiosk_print", {p_conf: confId, p_code: p.code, p_name: st.name, p_email: email()});
       const s = error ? "net" : data?.status;
       if (s === "ok") return track(p, st.name, data.job);
       if (s === "review") return review(p, st.name, data.registered);
       if (s === "closed") return closed();
-      $("#ksPrint").disabled = false; $("#ksPrint").classList.remove("wait");
+      busy(false);
       $(".ks-err").textContent = {limit: T("This certificate was printed 3 times already. Please ask at the desk.", "طُبعت هذه الشهادة 3 مرات. يرجى السؤال في المكتب."),
         busy: T("The printers are busy. Try again in a minute.", "الطابعات مشغولة، حاول بعد دقيقة."), name: T("Type your full name.", "اكتب اسمك الكامل."),
         email: T("That email doesn't look right.", "البريد الإلكتروني غير صحيح."), code: T("That ID wasn't found.", "لم يتم العثور على الرقم."),
         net: T("No connection. Try again.", "لا يوجد اتصال. حاول مرة أخرى.")}[s] || T("Not sent. Try again.", "لم يُرسل، حاول مرة أخرى.");
-    };
+    });
   };
 
   // 3. A little certificate with their name slides out of the printer; then where to collect it, and back to the start.
@@ -150,40 +158,43 @@ export async function renderKiosk(app, confId, mode = "print"){
     $("#ksDone").onclick = () => askId();
   };
 
-  // 3 (digital). The certificate on screen, made on the phone with the same layout the team prints; download it or email it.
+  // 3 (digital). Make the certificate on the phone (same layout the team prints) and email it; no download.
   const show = async (p, name, email) => {
     clearTimeout(resetT); clearInterval(pollT);
     const c = {conf: f, layouts: f.layouts || []}, person = {code: p.code, full_name: name, cert_name: name, category: p.category};
-    let pdf = null, img = "", sent = "", busy = false, err = "";
+    let stage = "make", sent = "", err = "";
     const draw = () => {
-      frame(3, `<div class="ks-center ks-digital"><h1>${T("Your certificate", "شهادتك")}</h1>
-        <div class="ks-cert">${img ? `<img src="${img}" alt="${T("Certificate for", "شهادة")} ${esc(name)}">` : `<div class="ks-cert-wait">${icon("award", "ic lg")}<span>${T("Making your certificate…", "جاري تجهيز شهادتك…")}</span></div>`}</div>
-        <div class="ks-acts"><button type="button" class="ks-go print" id="ksDl" ${pdf ? "" : "disabled"}>${icon("download")}${T("Download PDF", "تحميل PDF")}</button>
-          <button type="button" class="ks-b" id="ksMail" ${pdf && !busy && (email || p.email_hint) ? "" : "disabled"}>${icon("mail")}${sent ? T("Sent", "تم الإرسال") : busy ? T("Sending…", "جاري الإرسال…") : T("Email it to me", "أرسلها لبريدي")}</button></div>
-        <p class="ks-sub">${sent ? T(`Sent to <b>${esc(sent)}</b>. Check your inbox, and the spam folder.`, `أُرسلت إلى <b>${esc(sent)}</b>. تفقّد بريدك ومجلد الرسائل غير المرغوب فيها.`)
-          : email || p.email_hint ? T(`The email goes to <b dir="ltr">${esc(email || p.email_hint)}</b>.`, `سيصل إلى <b dir="ltr">${esc(email || p.email_hint)}</b>.`) : T("Add an email in the previous step to get it by email.", "أضف بريدك في الخطوة السابقة لتصلك بالبريد.")}</p>
-        <p class="ks-err" role="status">${esc(err)}</p>
-        <button type="button" class="ks-edit" id="ksAgain">${T("Someone else's certificate", "شهادة شخص آخر")}</button></div>`);
-      $("#ksAgain").onclick = () => askId();
-      $("#ksDl").onclick = () => { const url = URL.createObjectURL(pdf);
-        Object.assign(document.createElement("a"), {href: url, download: `Certificate - ${name.replace(/[\\/:*?"<>|]+/g, "")}.pdf`}).click(); setTimeout(() => URL.revokeObjectURL(url), 8000); };
-      $("#ksMail").onclick = async () => {
-        busy = true; err = ""; draw();
+      const done = stage === "sent", failed = stage === "error";
+      frame(3, `<div class="ks-center ks-mail ${done ? "done" : ""}">
+        <div class="ks-env ${done ? "done" : failed ? "" : "busy"}" aria-hidden="true">${icon(done ? "check" : failed ? "alert" : "mail", "ic lg")}</div>
+        <h1>${done ? T("Your certificate is on its way", "شهادتك في الطريق إليك") : failed ? T("It wasn't sent", "لم تُرسل") : stage === "send" ? T("Sending…", "جاري الإرسال…") : T("Making your certificate…", "جاري تجهيز شهادتك…")}</h1>
+        <p class="ks-status">${done ? T(`Sent to <b dir="ltr">${esc(sent)}</b>`, `أُرسلت إلى <b dir="ltr">${esc(sent)}</b>`) : failed ? esc(err)
+          : T(`To <b dir="ltr">${esc(email || p.email_hint)}</b>`, `إلى <b dir="ltr">${esc(email || p.email_hint)}</b>`)}</p>
+        ${done ? `<p class="ks-sub">${T("Check your inbox in a few minutes, and the spam or junk folder.", "تفقّد بريدك خلال دقائق، ومجلد الرسائل غير المرغوب فيها.")}</p><div class="ks-count"><i></i></div>` : ""}
+        ${failed ? `<div class="ks-acts"><button type="button" class="ks-go" id="ksRetry">${T("Try again", "حاول مرة أخرى")}</button><button type="button" class="ks-b" id="ksAgain">${T("Start again", "ابدأ من جديد")}</button></div>`
+          : done ? `<button type="button" class="ks-b" id="ksAgain">${T("Done", "تم")}</button>` : ""}</div>`);
+      $("#ksAgain") && ($("#ksAgain").onclick = () => askId());
+      $("#ksRetry") && ($("#ksRetry").onclick = () => go());
+    };
+    const go = async () => {
+      stage = "make"; err = ""; view = draw; draw();
+      try {
+        const pdf = await certPdf(c, [person]);
+        stage = "send"; draw();
         const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(",")[1]); fr.readAsDataURL(pdf); });
         const { data, error } = await SB.functions.invoke("cert-digital", {body: {conf: confId, code: p.code, name, email, pdf: b64}});
-        busy = false;
-        if (error || !data?.ok) { let m = T("Not sent. Download the PDF instead, or try again.", "لم تُرسل. حمّل الملف بدلًا من ذلك أو حاول مجددًا.");
-          try { m = (await error.context.json()).error || m; } catch {} err = m; }
-        else sent = data.email_hint;
-        draw();
-      };
+        if (error || !data?.ok) {
+          let j = {}; try { j = await error.context.json(); } catch {}
+          if (j.code === "review") return review(p, name, j.registered);
+          if (j.code === "closed") return closed();
+          stage = "error"; err = j.error || T("No connection. Try again.", "لا يوجد اتصال. حاول مرة أخرى."); return draw();
+        }
+        stage = "sent"; sent = data.email_hint; draw(); later(() => askId(), 15000);
+      } catch (e) { stage = "error"; err = T("The certificate couldn't be made on this phone. Please ask at the desk.", "تعذر تجهيز الشهادة على هذا الجهاز، يرجى السؤال في المكتب."); draw(); }
     };
-    view = draw; draw();
-    try { pdf = await certPdf(c, [person], {onCanvas: cv => { if (!img) img = cv.toDataURL("image/jpeg", .82); }}); }
-    catch (e) { err = T("The certificate couldn't be made on this phone. Please ask at the desk.", "تعذر تجهيز الشهادة على هذا الجهاز، يرجى السؤال في المكتب."); }
-    draw();
+    go();
   };
-  if (!f || (digital && !f.open)) return closed();
+  if (!f || !f.open) return closed();
   askId();
 }
 
@@ -244,29 +255,33 @@ export async function renderStation(app, confId){
 
 /* ---------- team panel (Certificates page) ---------- */
 export function kioskPanel(c){
-  const k = {open: false, full: true, ...(c.conf.print_kiosk || {})};
-  return `<section class="panel form ksp" id="ksPanel"><div class="panel-head" style="margin:0"><h2>Self-print certificates</h2><span class="pill ${k.open ? "ok live" : ""}">${k.open ? "Open" : "Closed"}</span></div>
-    <p class="note" style="margin:0">Attendees type their badge ID, confirm name and email, and the certificate prints by itself on whichever printer is free.</p>
-    <div class="ksp-live" id="ksLive"><span class="note">Loading the printers…</span></div>
-    <label>Prints<select id="ksFull"><option value="1" ${k.full !== false ? "selected" : ""}>Full design, on blank paper</option><option value="" ${k.full === false ? "selected" : ""}>Text only, on paper with the design already printed</option></select></label>
-    <div class="codes" style="justify-content:center"><div style="width:140px;height:140px">${qrSvg(kioskUrl(c.conf.id))}</div></div>
-    <div class="row"><button type="button" id="ksToggle" class="${k.open ? "ghost" : ""}">${k.open ? "Close self-print" : "Open self-print"}</button>
-      <button type="button" class="ghost" id="ksCopy">${icon("link")}Kiosk link</button><button type="button" class="ghost" id="ksStation">${icon("print")}Station link</button></div>
-    <div class="ksp-dig"><div><b>Digital certificate QR</b><span class="pill ${k.digital ? "ok live" : ""}">${k.digital ? "Open" : "Closed"}</span></div>
-      <p class="note" style="margin:0">No printer: people scan, confirm their name, and download their certificate or get it by email.</p>
-      ${k.digital ? `<div class="codes" style="justify-content:center"><div style="width:120px;height:120px">${qrSvg(digitalUrl(c.conf.id))}</div></div>` : ""}
-      <div class="row"><button type="button" id="dgToggle" class="${k.digital ? "ghost" : ""}">${k.digital ? "Close digital QR" : "Open digital QR"}</button><button type="button" class="ghost" id="dgCopy">${icon("link")}Digital link</button></div></div>
-    <p class="note" style="margin:0">On each printer laptop: sign in, open the station link in Chrome started with <code>--kiosk-printing</code>, and pick its printer name.</p></section>`;
+  const k = {open: false, full: true, digital: false, ...(c.conf.print_kiosk || {})}, on = k.open || k.digital;
+  return `<section class="panel form ksp" id="ksPanel"><div class="panel-head" style="margin:0"><h2>Certificate QR</h2><span class="pill ${on ? "ok live" : ""}">${on ? "Open" : "Closed"}</span></div>
+    <p class="note" style="margin:0">One QR for everyone: people type their badge ID, check their name and email, then get their certificate the ways you switch on.</p>
+    <div class="ksp-opts">
+      <label class="ksp-opt ${k.open ? "on" : ""}"><input type="checkbox" id="ksOptPrint" ${k.open ? "checked" : ""}><span>${icon("print")}<b>Print at the desk</b><small>Prints by itself on a printer device</small></span></label>
+      <label class="ksp-opt ${k.digital ? "on" : ""}"><input type="checkbox" id="ksOptMail" ${k.digital ? "checked" : ""}><span>${icon("mail")}<b>Send by email</b><small>The certificate arrives as a PDF</small></span></label></div>
+    ${on ? `<div class="codes" style="justify-content:center"><div style="width:150px;height:150px">${qrSvg(kioskUrl(c.conf.id))}</div></div>` : ""}
+    <div class="row"><button type="button" class="ghost" id="ksSign">${icon("print")}Table sign</button><button type="button" class="ghost" id="ksCopy">${icon("link")}Copy link</button></div>
+    ${k.open ? `<div class="ksp-print"><b>Printing</b>
+      <div class="ksp-live" id="ksLive"><span class="note">Loading the printers…</span></div>
+      <label>Prints<select id="ksFull"><option value="1" ${k.full !== false ? "selected" : ""}>Full design, on blank paper</option><option value="" ${k.full === false ? "selected" : ""}>Text only, on paper with the design already printed</option></select></label>
+      </div>` : ""}</section>`;
 }
 export function wireKiosk(el, c, ctx){
-  const k = {open: false, full: true, ...(c.conf.print_kiosk || {})};
+  const k = {open: false, full: true, digital: false, ...(c.conf.print_kiosk || {})};
   const save = async patch => { const { error } = await SB.from("conferences").update({print_kiosk: {...k, ...patch}}).eq("id", c.conf.id); if (error) return toast(error.message, "bad"); ctx.reload(); };
-  $("#ksToggle", el).onclick = () => save({open: !k.open}).then(() => toast(k.open ? "Self-print closed" : "Self-print open"));
-  $("#ksFull", el).onchange = e => save({full: !!e.target.value});
-  $("#dgToggle", el).onclick = () => save({digital: !k.digital}).then(() => toast(k.digital ? "Digital QR closed" : "Digital QR open"));
-  $("#dgCopy", el).onclick = () => navigator.clipboard.writeText(digitalUrl(c.conf.id)).then(() => toast("Digital certificate link copied"));
-  $("#ksCopy", el).onclick = () => navigator.clipboard.writeText(kioskUrl(c.conf.id)).then(() => toast("Kiosk link copied"));
-  $("#ksStation", el).onclick = () => navigator.clipboard.writeText(stationUrl(c.conf.id)).then(() => toast("Station link copied. Open it on each printer laptop."));
+  $("#ksOptPrint", el).onchange = e => save({open: e.target.checked}).then(() => toast(e.target.checked ? "Printing at the desk is on" : "Printing at the desk is off"));
+  $("#ksOptMail", el).onchange = e => save({digital: e.target.checked}).then(() => toast(e.target.checked ? "Sending by email is on" : "Sending by email is off"));
+  $("#ksFull", el) && ($("#ksFull", el).onchange = e => save({full: !!e.target.value}));
+  $("#ksSign", el).onclick = () => {
+    const how = k.open && k.digital ? ["Check your name: print it at the desk or get it by email", "وتأكد من اسمك لتطبعها على المكتب أو تصلك بالبريد."]
+      : k.digital ? ["Check your name and email: it arrives by email", "وتأكد من اسمك وبريدك لتصلك الشهادة على بريدك الإلكتروني."]
+      : ["Check your name: it prints at the desk", "وتأكد من اسمك لتُطبع شهادتك على المكتب."];
+    tableSign(c, kioskUrl(c.conf.id), {kind: "certificate", title: "Get your<br>certificate", ar: "احصل على شهادتك",
+      steps: ["Scan with your phone camera", "Type the ID printed on your badge", how[0]], arLine: "امسح الرمز، اكتب رقم بطاقتك، " + how[1]});
+  };
+  $("#ksCopy", el).onclick = () => navigator.clipboard.writeText(kioskUrl(c.conf.id)).then(() => toast("Certificate QR link copied"));
   const live = async () => {
     const box = $("#ksLive", el); if (!box || !document.contains(box)) return;
     const [{ data: st }, { data: jobs }] = await Promise.all([SB.from("print_stations").select("*").eq("conference_id", c.conf.id).order("name"),
@@ -274,7 +289,7 @@ export function wireKiosk(el, c, ctx){
     if (!document.contains(box)) return;
     const on = s => Date.now() - Date.parse(s.seen_at) < 15000, q = (jobs || []).filter(j => j.status === "queued").length;
     box.innerHTML = `<div class="ksp-st">${(st || []).map(s => `<span class="ksp-s ${on(s) ? "on" : ""}">${icon("print", "ic sm")}${esc(s.name)}<small>${on(s) ? `${s.printed} printed` : "offline"}</small></span>`).join("")
-        || `<span class="note">No printer stations yet. Open the station link on a printer laptop.</span>`}</div>
+        || `<span class="note">No printer is on yet. On the laptop with the printer, turn on <b>Print certificates here</b> in the side menu.</span>`}</div>
       ${(jobs || []).length ? `<ul class="ksp-jobs">${jobs.map(j => `<li class="${j.status}"><span class="num">${esc(j.code)}</span><span dir="auto">${esc(j.name)}</span><small>${j.status === "printed" ? `${esc(j.station || "")} ✓` : j.status === "printing" ? `printing at ${esc(j.station || "")}` : esc(j.status)}</small></li>`).join("")}</ul>` : ""}
       ${q ? `<p class="note" style="margin:0">${q} waiting for a printer</p>` : ""}`;
     setTimeout(live, 4000);
