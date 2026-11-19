@@ -1,7 +1,8 @@
-// New-registration island: a pill at the top of every conference page. When someone registers from the desk QR it opens
-// on its own with their details and four actions, so the desk never has to leave the page it is on.
+// Island: a pill at the top of every conference page. When someone registers from the desk QR, or sends a fix for their
+// certificate name or email, it opens on its own with the details and the actions, so the desk never leaves the page it is on.
+// Two looks: navy for a new registration, plum for a detail change.
 import {SB, $, esc, state, can, icon, flag, armed, toast} from "./core.js";
-import {approve, dupOf, link, review, waited} from "./register.js";
+import {approve, dupOf, link, review, waited, fetchEdits, approveEdit, declineEdit, editLines} from "./register.js";
 
 const POLL = 6000;
 let last = "", shown = null, box = null, confId = null, ctx = null, timer = null, queue = [], seen = new Set(), skipped = new Set(), open = false, busy = false, first = true;
@@ -20,8 +21,11 @@ export function stop(){ last = ""; shown = null; clearInterval(timer); timer = n
 
 async function poll(){
   if (busy || document.visibilityState !== "visible" || !confId) return;
-  const id = confId, { data, error } = await SB.from("registrations").select("*").eq("conference_id", id).eq("status", "pending").order("created_at").limit(50);
+  const id = confId, [{ data: regs, error }, edits] = await Promise.all([
+    SB.from("registrations").select("*").eq("conference_id", id).eq("status", "pending").order("created_at").limit(50), fetchEdits(id)]);
   if (error || id !== confId) return;
+  // one queue, oldest first; _t says which kind
+  const data = [...regs.map(r => ({...r, _t: "reg"})), ...edits.map(r => ({...r, _t: "edit"}))].sort((x, y) => x.created_at < y.created_at ? -1 : 1);
   const fresh = data.filter(r => !seen.has(r.id));
   data.forEach(r => seen.add(r.id));
   queue = data;
@@ -40,11 +44,24 @@ function draw(){
   if (box.querySelector(".armed")) return; // keep "Tap again to confirm" until it is tapped or times out
   if (!open || !r) {
     shown = null;
-    return put("isl", `<button type="button" class="isl-pill" data-isl="open"><span class="isl-dot"></span><b>${queue.length}</b> new registration${queue.length === 1 ? "" : "s"}${!r ? ", all skipped" : ""}</button>`);
+    const nR = queue.filter(x => x._t === "reg").length, nE = queue.length - nR;
+    return put("isl", `<button type="button" class="isl-pill${nR ? "" : " edit"}" data-isl="open">${nR ? `<span class="isl-dot"></span><b>${nR}</b> new registration${nR === 1 ? "" : "s"}` : ""}
+      ${nE ? `<span class="isl-dot ed"></span><b>${nE}</b> detail change${nE === 1 ? "" : "s"}` : ""}${!r ? ", all skipped" : ""}</button>`);
   }
-  const c = state.c, d = c && dupOf(c, r), pos = queue.indexOf(r) + 1;
+  const c = state.c, pos = queue.indexOf(r) + 1;
   // The card springs open only when a new person comes up, not on every refresh.
   const pop = shown !== r.id; shown = r.id;
+  if (r._t === "edit") {
+    const a = c?.attendees.find(x => x.id === r.attendee_id);
+    return put("isl open", `<div class="isl-card edit${pop ? " pop" : ""}">
+      <div class="isl-top"><span class="isl-dot ed"></span><span class="isl-count">Detail change${queue.length > 1 ? ` ${pos} of ${queue.length}` : ""}</span><span class="isl-wait">${esc(waited(r.created_at))}</span>
+        <button type="button" class="isl-x" data-isl="min" aria-label="Minimise">${icon("down", "ic sm")}</button></div>
+      <div class="isl-who"><b dir="auto">${esc(a?.full_name || "")}</b><span>ID <span class="num">${esc(r.code)}</span>${a?.category ? " · " + esc(a.category) : ""}</span></div>
+      <div class="isl-diff">${editLines(r).map(([k, o, n]) => `<div><small>${esc(k)}</small><s dir="auto">${esc(o)}</s><b dir="auto">${esc(n)}</b></div>`).join("")}</div>
+      <div class="isl-acts ed"><button type="button" class="isl-b no" data-isl="decline">Decline</button><button type="button" class="isl-b" data-isl="skip">Skip</button>
+        <button type="button" class="isl-b go" data-isl="approve">${icon("check", "ic sm")}Approve change</button></div></div>`, pop);
+  }
+  const d = c && dupOf(c, r);
   put("isl open", `<div class="isl-card${pop ? " pop" : ""}">
     <div class="isl-top"><span class="isl-dot"></span><span class="isl-count">New registration${queue.length > 1 ? ` ${pos} of ${queue.length}` : ""}</span><span class="isl-wait">${esc(waited(r.created_at))}</span>
       <button type="button" class="isl-x" data-isl="min" aria-label="Minimise">${icon("down", "ic sm")}</button></div>
@@ -68,6 +85,11 @@ document.addEventListener("click", async e => {
   if (k === "min") { open = false; return draw(); }
   if (!r || busy) return;
   if (k === "skip") { skipped.add(r.id); return draw(); }
+  if (r._t === "edit") {
+    if (k === "approve") return act(r, () => approveEdit(r, {reload: async () => {}}));
+    if (k === "decline") return armed(b, () => act(r, () => declineEdit(r, {reload: async () => {}})));
+    return;
+  }
   if (k === "edit") return review(state.c, r, {reload: done(r)});
   if (k === "decline") return armed(b, () => act(r, async () => {
     const { error } = await SB.from("registrations").update({status: "rejected", decided_at: new Date().toISOString()}).eq("id", r.id);

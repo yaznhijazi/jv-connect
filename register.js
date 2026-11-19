@@ -3,6 +3,7 @@
 import {SB, $, $$, esc, hm, dayShort, dateRange, store, toast, formData, qrSvg, barcodeSvg, selectOptions, countriesOf, initials, icon, armed, DEFAULT_COUNTRIES, countryPicker, dialog, categoriesOf, flag} from "./core.js";
 import {nextCode} from "./attendees.js";
 import {printDocs} from "./print.js";
+import {editUrl} from "./certs.js";
 import {STD, formOf, questionInput, answersFrom, answersList, editForm} from "./regform.js";
 
 export const waited = iso => { const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 6e4));
@@ -105,6 +106,24 @@ const row = (r, code) => ({conference_id: r.conference_id, code, full_name: r.fu
   category: r.category, entity: r.entity, country: r.country, fee_amount: 0, fee_paid: false, fee_note: "Self-registered", ...(r.answers && Object.keys(r.answers).length ? {answers: r.answers} : {})});
 // Yes/no questions can tag the person ("Will you attend the workshop?" Yes → Workshop).
 const autoTags = (c, r) => formOf(c.conf).questions.filter(q => q.type === "yesno" && q.tag_on_yes && (r.answers || {})[q.id] === "Yes").map(q => q.tag_on_yes.trim()).filter(Boolean);
+/* ---------- detail changes sent from the "fix my details" QR ---------- */
+export const fetchEdits = confId => SB.from("attendee_edit_requests").select("*").eq("conference_id", confId).eq("status", "pending").order("created_at").limit(100)
+  .then(({data, error}) => error ? [] : data);
+export async function approveEdit(r, ctx){
+  const patch = {}; if (r.cert_name) patch.cert_name = r.cert_name; if (r.email) patch.email = r.email;
+  const { error } = await SB.from("attendees").update(patch).eq("id", r.attendee_id);
+  if (error) { toast(error.message, "bad"); return false; }
+  await SB.from("attendee_edit_requests").update({status: "approved", decided_at: new Date().toISOString()}).eq("id", r.id);
+  toast(`${r.code}: ${[r.cert_name && "certificate name", r.email && "email"].filter(Boolean).join(" and ")} updated`); await ctx.reload();
+}
+export async function declineEdit(r, ctx){
+  const { error } = await SB.from("attendee_edit_requests").update({status: "rejected", decided_at: new Date().toISOString()}).eq("id", r.id);
+  if (error) { toast(error.message, "bad"); return false; }
+  toast(`${r.code}: change declined`); await ctx.reload();
+}
+// What changes, old → new, for a card.
+export const editLines = r => [r.cert_name && ["Name on certificate", r.old?.cert_name, r.cert_name], r.email && ["Email", r.old?.email || "none", r.email]].filter(Boolean);
+
 // Same person already registered: close the request against them, and print their badge if asked.
 export async function link(c, r, a, ctx, {print = false} = {}){
   const { error } = await SB.from("registrations").update({status: "approved", attendee_id: a.id, decided_at: new Date().toISOString()}).eq("id", r.id);
@@ -178,6 +197,11 @@ export function render(el, c, ctx){
           <div class="rq-acts"><button type="button" class="ghost small" data-check="${r.id}">${icon("search")}Check and edit</button><button type="button" class="rq-rej" data-rej="${r.id}">Reject</button>
             <span class="rq-gap"></span><button type="button" class="ghost small" data-okp="${r.id}">${icon("print")}Approve and print</button><button type="button" class="small" data-ok="${r.id}">${icon("check")}Approve</button></div></div>`; }).join("")
         || `<div class="tip"><span class="tip-ic">${icon("attendees")}</span><span><b>No one waiting</b><small>${conf.registration_open ? "Put the desk sign out; requests land here." : "Registration is closed. Open it on the right."}</small></span></div>`}</div></section>
+    <section class="panel" id="edPanel"><div class="panel-head"><div><h2>Detail changes</h2><span class="note">Attendees fix their certificate name or email from a QR; you approve.</span></div>
+        <span class="pill ${conf.edit_form_open ? "ok live" : ""}">${conf.edit_form_open ? "Open" : "Closed"}</span></div>
+      <div class="tips" id="edList"><div class="note">Loading…</div></div>
+      <div class="row" style="margin-top:12px"><button type="button" id="edToggle" class="${conf.edit_form_open ? "ghost" : ""}">${conf.edit_form_open ? "Close the form" : "Open the form"}</button>
+        <button type="button" class="ghost" id="edCopy">${icon("link")}Copy link</button><button type="button" class="ghost" id="edSign">${icon("print")}Print the QR sign</button></div></section>
     <section class="panel form"><div class="panel-head" style="margin:0"><h2>Desk sign</h2><span class="pill ${conf.registration_open ? "ok live" : ""}">${conf.registration_open ? "Open" : "Closed"}</span></div>
       <p class="note" style="margin:0">Visitors scan this code with their phone camera, fill in their details, and wait for you to approve them here.</p>
       <div class="codes" style="justify-content:center"><div style="width:180px;height:180px">${qrSvg(url)}</div></div>
@@ -198,6 +222,23 @@ export function render(el, c, ctx){
   $("#rToggle").onclick = async () => { const { error } = await SB.from("conferences").update({registration_open: !conf.registration_open}).eq("id", conf.id); if (error) return toast(error.message, "bad");
     toast(conf.registration_open ? "Registration closed" : "Registration open"); ctx.reload(); };
   $("#rSign").onclick = () => printSign(c, url);
+  const eUrl = editUrl(conf.id);
+  $("#edCopy").onclick = () => navigator.clipboard.writeText(eUrl).then(() => toast("Link copied"));
+  $("#edSign").onclick = () => printSign(c, eUrl, {title: "Fix your name<br>or email", ar: "تعديل الاسم أو البريد الإلكتروني", sub: "Open your phone camera and point it at the code. Type your badge ID, fix the name for your certificate or your email, and the desk approves it."});
+  $("#edToggle").onclick = async () => { const { error } = await SB.from("conferences").update({edit_form_open: !conf.edit_form_open}).eq("id", conf.id); if (error) return toast(error.message, "bad");
+    toast(conf.edit_form_open ? "Form closed" : "Form open"); ctx.reload(); };
+  fetchEdits(conf.id).then(list => { const box = $("#edList", el); if (!box) return;
+    box.innerHTML = list.map(r => { const a = c.attendees.find(x => x.id === r.attendee_id);
+      return `<div class="reg-card ed-card"><div class="rq-top"><span class="av">${esc(initials(a?.full_name || r.code))}</span><div class="rq-who"><b class="rq-name" dir="auto">${esc(a?.full_name || "")}</b>
+        <div class="rq-meta"><span class="pill acc num">ID ${esc(r.code)}</span></div>
+        <div class="ed-diff">${editLines(r).map(([k, o, n]) => `<div><small>${esc(k)}</small><s dir="auto">${esc(o)}</s><span aria-hidden="true">→</span><b dir="auto">${esc(n)}</b></div>`).join("")}</div></div>
+        <span class="rq-wait">${icon("clock", "ic sm")}${waited(r.created_at)}</span></div>
+        <div class="rq-acts"><button type="button" class="rq-rej" data-edno="${r.id}">Decline</button><span class="rq-gap"></span><button type="button" class="small" data-edok="${r.id}">${icon("check")}Approve</button></div></div>`; }).join("")
+      || `<div class="tip"><span class="tip-ic">${icon("check")}</span><span><b>No changes waiting</b><small>${conf.edit_form_open ? "Requests land here and on the island." : "Open the form so attendees can send changes."}</small></span></div>`;
+    const byId = id => list.find(r => r.id === id);
+    $$("[data-edok]", box).forEach(b => b.onclick = () => { b.disabled = true; approveEdit(byId(b.dataset.edok), ctx); });
+    $$("[data-edno]", box).forEach(b => b.onclick = () => armed(b, () => declineEdit(byId(b.dataset.edno), ctx)));
+  });
   $("#rForm").onclick = () => editForm(c, ctx);
   // Keep the queue fresh while this page is open.
   const t = setInterval(async () => { if (!document.contains(el) || location.hash.indexOf("/register") < 0) return clearInterval(t);
@@ -206,14 +247,14 @@ export function render(el, c, ctx){
     if (count !== regs.length) ctx.reload(); }, 15000);
 }
 // A4 sign for the registration desk, in English and Arabic.
-function printSign(c, url){
+function printSign(c, url, {title = "Scan to register<br>for your badge", ar = "امسح الرمز للتسجيل", sub = "Open your phone camera and point it at the code. Fill in your details; your badge ID appears once the desk approves it."} = {}){
   const style = document.getElementById("pageStyle") || document.head.appendChild(Object.assign(document.createElement("style"), {id: "pageStyle"}));
   style.textContent = "@page{size:210mm 297mm;margin:0}";
   $("#printArea").innerHTML = `<div class="print-page" style="width:210mm;height:297mm;display:grid;justify-items:center;align-content:center;gap:9mm;text-align:center;font-family:'Bricolage Grotesque','Cairo',sans-serif;color:#002a3d;padding:20mm">
     <img src="assets/jv-mark.svg" style="height:16mm" alt=""><div style="font-size:15pt;color:#587080;max-width:150mm">${esc(c.conf.name)}</div>
-    <div style="font-size:40pt;font-weight:700;line-height:1.05">Scan to register<br>for your badge</div>
-    <div dir="rtl" style="font-family:Cairo,sans-serif;font-size:28pt;font-weight:700">امسح الرمز للتسجيل</div>
+    <div style="font-size:40pt;font-weight:700;line-height:1.05">${title}</div>
+    <div dir="rtl" style="font-family:Cairo,sans-serif;font-size:28pt;font-weight:700">${ar}</div>
     <div style="width:105mm;height:105mm;padding:6mm;border:1.2mm solid #00bdeb;border-radius:8mm">${qrSvg(url)}</div>
-    <div style="font-size:13pt;color:#587080;max-width:150mm">Open your phone camera and point it at the code. Fill in your details; your badge ID appears once the desk approves it.</div></div>`;
+    <div style="font-size:13pt;color:#587080;max-width:150mm">${sub}</div></div>`;
   setTimeout(() => print(), 150);
 }

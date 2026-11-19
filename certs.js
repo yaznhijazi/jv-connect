@@ -132,6 +132,57 @@ export async function renderSelf(app, confId, startCode = ""){
   askId(startCode);
 }
 
+/* ---------- fix my details by badge ID: certificate name or email, sent to the desk for approval ---------- */
+export const editUrl = (id, code = "") => `${location.href.split("#")[0]}#/edit/${id}${code ? "/" + encodeURIComponent(code) : ""}`;
+export async function renderEdit(app, confId, startCode = ""){
+  app.innerHTML = publicBar + `<main><div class="wrap"><div class="scan-wrap" id="pg"><div class="empty">Loading…</div></div></div></main>`;
+  const { data: f } = await SB.rpc("c_reg_info", {p_conf: confId});
+  const pg = $("#pg"), L = (en, ar) => `${en} <span dir="rtl" class="ms-ar">${ar}</span>`;
+  const head = f ? `<div class="panel ms-head"><h1>${esc(f.name)}</h1><p class="note">${esc(dateRange(f.start_date, f.end_date))}${f.venue ? ", " + esc(f.venue) : ""}</p></div>` : "";
+  const closed = () => { pg.innerHTML = head + `<div class="panel empty-state">${icon("clock", "ic lg")}<h2>Changes aren't open right now</h2><p>Please ask at the registration desk. <span dir="rtl">يرجى السؤال في مكتب التسجيل.</span></p></div>`; };
+  const askId = (code = "", msg = "") => {
+    pg.innerHTML = head + `<form class="panel form" id="edId" novalidate><div><h2>${L("Fix your name or email", "تعديل الاسم أو البريد")}</h2>
+        <p class="note" style="margin:4px 0 0">Type the ID printed on your badge. <span dir="rtl" style="display:block">اكتب الرقم المطبوع على بطاقتك.</span></p></div>
+      <label>${L("Badge ID", "رقم البطاقة")}<input name="code" required maxlength="32" inputmode="numeric" autocomplete="off" class="ms-code" value="${esc(code)}" placeholder="0001"></label>
+      <button type="submit" class="big-btn">Continue <span dir="rtl">متابعة</span></button><p class="note ms-err" role="status">${esc(msg)}</p></form>`;
+    const form = $("#edId"); form.code.focus();
+    form.onsubmit = async e => { e.preventDefault(); const v = clean(form.code.value); if (!v) return $(".ms-err", form).textContent = "Type your badge ID.";
+      const btn = $("button", form); btn.disabled = true;
+      const { data: p, error } = await SB.rpc("c_edit_lookup", {p_conf: confId, p_code: v}); btn.disabled = false;
+      if (error) return $(".ms-err", form).textContent = "No connection. Check your internet and try again.";
+      if (p.closed) return closed();
+      if (!p.found) return $(".ms-err", form).textContent = "No attendee has that badge ID. Check the number on your badge.";
+      details(p); };
+    if (code && !msg) form.requestSubmit();
+  };
+  const details = (p, msg = "", draft = {}) => {
+    pg.innerHTML = head + `<form class="panel form" id="edForm" novalidate><div class="ms-who"><span class="pill acc">${esc(p.code)}</span><b dir="auto">${esc(p.name)}</b>
+        <button type="button" class="linkish" id="edBack">Not you?</button></div>
+      ${p.pending ? `<p class="note" style="margin:0">You already sent a change that's waiting for the desk. Sending again replaces it.</p>` : ""}
+      <label>${L("Name on the certificate", "الاسم على الشهادة")}<input name="name" maxlength="120" dir="auto" class="ms-name" value="${esc(draft.name ?? p.cert_name)}"></label>
+      <p class="note" style="margin:-6px 0 0">It prints exactly like this. <span dir="rtl" style="display:block">سيُطبع الاسم كما هو.</span></p>
+      <label>${L("Email", "البريد الإلكتروني")}<input name="email" type="email" maxlength="200" autocomplete="email" inputmode="email" value="${esc(draft.email || "")}" placeholder="${p.email_hint ? `Now ${esc(p.email_hint)}. Leave empty to keep it` : "name@example.com"}"></label>
+      <button type="submit" class="big-btn">Send to the desk <span dir="rtl">إرسال</span></button><p class="note ms-err" role="status">${esc(msg)}</p></form>`;
+    const form = $("#edForm"); $("#edBack").onclick = () => askId();
+    form.onsubmit = async e => { e.preventDefault(); const err = $(".ms-err", form);
+      const name = clean(form.name.value).replace(/\s+/g, " "), email = clean(form.email.value).toLowerCase();
+      if (name && name.length < 2) return err.textContent = "Type your full name.";
+      if (email && !EMAIL.test(email)) return err.textContent = "That email doesn't look right. Check it and try again.";
+      const btn = $("button[type=submit]", form); btn.disabled = true; err.textContent = "Sending…";
+      const { data, error } = await SB.rpc("c_edit_request", {p_conf: confId, p_code: p.code, p_cert_name: name, p_email: email}); btn.disabled = false;
+      const s = error ? "net" : data?.status;
+      if (s === "ok") { pg.innerHTML = head + `<div class="panel reg-done"><span class="pill ok">Sent</span><h2 dir="auto">${esc(p.name)}</h2>
+          <p style="margin:0">The desk will check your change. Nothing else to do.</p><p class="note" dir="rtl" style="margin:0">تم الإرسال، سيراجعه فريق التسجيل.</p>
+          <button type="button" class="ghost" id="edAgain">Fix someone else's details</button></div>`; return $("#edAgain").onclick = () => askId(); }
+      if (s === "closed") return closed();
+      err.textContent = {same: "Nothing changed. Edit the name or type a new email.", email: "That email doesn't look right.", name: "Type your full name.",
+        code: "That badge ID wasn't found.", busy: "Too many changes waiting. Please ask at the desk.", net: "No connection. Check your internet and try again."}[s] || "Not sent. Try again.";
+    };
+  };
+  if (!f) return closed();
+  askId(startCode);
+}
+
 /* ---------- admin ---------- */
 const ui = {tab: "pending", q: "", bulk: ""};
 let reqs = [], timer = null;

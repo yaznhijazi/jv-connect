@@ -1000,3 +1000,26 @@ body[data-role="viewer"] .ms-allow,body[data-role="staff"] #msToggle{display:non
 @media (max-width:520px){.isl-acts{grid-template-columns:1fr 1fr}.isl-b.go{grid-column:span 2;order:-2}.isl-acts [data-isl=add]{grid-column:span 2;order:-1}}
 @media (prefers-reduced-motion:reduce){.isl-card,.isl-dot{animation:none}}
 @media print{.isl{display:none!important}}
+
+/* island, second look: plum for a detail change (certificate name or email fixed by the attendee) */
+.isl-pill{gap:10px}
+.isl-pill.edit,.isl-card.edit{background:#2e1f47;border-color:rgba(255,255,255,.1)}
+.isl-pill.edit:hover{background:#3a2858}
+.isl-dot.ed{background:#c4a1ff;animation-name:isl-ping-ed}
+@keyframes isl-ping-ed{0%{box-shadow:0 0 0 0 rgba(196,161,255,.55)}100%{box-shadow:0 0 0 9px rgba(196,161,255,0)}}
+.isl-card.edit .isl-top,.isl-card.edit .isl-who>span{color:#c9bde0}
+.isl-card.edit .isl-who{cursor:default}
+.isl-diff{display:grid;gap:6px}
+.isl-diff>div{display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:baseline;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.07)}
+.isl-diff small{grid-row:span 2;font-size:11.5px;color:#c9bde0;width:92px}
+.isl-diff s{color:#b3a6c9;font-size:13px;overflow-wrap:anywhere}
+.isl-diff b{font-size:15px;overflow-wrap:anywhere}
+.isl-acts.ed{grid-template-columns:auto auto 1fr}
+.isl-card.edit .isl-b.go{background:#c4a1ff;color:#1f1433}
+.isl-card.edit .isl-b.go:hover{background:#d4b9ff}
+@media (max-width:520px){.isl-acts.ed{grid-template-columns:1fr 1fr}.isl-acts.ed .isl-b.go{grid-column:span 2;order:-2}}
+/* Registrations page: detail change cards */
+.ed-diff{display:grid;gap:4px;margin-top:6px;font-size:13.5px}
+.ed-diff>div{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
+.ed-diff small{color:var(--muted);min-width:130px}
+.ed-diff s{color:var(--muted)}
