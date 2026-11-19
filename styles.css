@@ -984,7 +984,11 @@ body[data-role="viewer"] .ms-allow,body[data-role="staff"] #msToggle{display:non
 .isl-who b{font:700 19px/1.25 var(--display);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .isl-who>span{font-size:13px;color:#a9c3cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .isl-who .flag{width:16px;height:12px;vertical-align:-1px;margin-right:4px}
-.isl-dup{margin:0;display:flex;gap:6px;align-items:center;font-size:12.5px;color:#fdb022}
+.isl-dup{display:grid;gap:8px}
+.isl-dup p{margin:0;display:flex;gap:6px;align-items:center;font-size:12.5px;color:#fdb022}
+.isl-acts.two{grid-template-columns:1fr 1.4fr}
+.isl-b.warn{background:#fdb022;color:#0b2533}
+.isl-b.warn:hover{background:#fec04a}
 .isl-acts{display:grid;grid-template-columns:auto auto 1fr 1.4fr;gap:6px}
 .isl-b{min-height:40px;padding:0 12px;border-radius:999px;border:0;background:rgba(255,255,255,.1);color:#fff;font:600 13.5px/1 var(--font);display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;white-space:nowrap}
 .isl-b:hover{background:rgba(255,255,255,.18)}

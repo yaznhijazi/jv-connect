@@ -105,6 +105,14 @@ const row = (r, code) => ({conference_id: r.conference_id, code, full_name: r.fu
   category: r.category, entity: r.entity, country: r.country, fee_amount: 0, fee_paid: false, fee_note: "Self-registered", ...(r.answers && Object.keys(r.answers).length ? {answers: r.answers} : {})});
 // Yes/no questions can tag the person ("Will you attend the workshop?" Yes → Workshop).
 const autoTags = (c, r) => formOf(c.conf).questions.filter(q => q.type === "yesno" && q.tag_on_yes && (r.answers || {})[q.id] === "Yes").map(q => q.tag_on_yes.trim()).filter(Boolean);
+// Same person already registered: close the request against them, and print their badge if asked.
+export async function link(c, r, a, ctx, {print = false} = {}){
+  const { error } = await SB.from("registrations").update({status: "approved", attendee_id: a.id, decided_at: new Date().toISOString()}).eq("id", r.id);
+  if (error) { toast(error.message, "bad"); return false; }
+  toast(`Linked to ${a.code} ${a.full_name}${print ? ", printing the badge" : ""}`);
+  if (print) await printDocs(c, "badge", [a]);
+  await ctx.reload();
+}
 export async function approve(c, list, ctx, {print = false} = {}){
   // An empty code lets the database give the next free ID, so two desks approving at once never collide.
   const rows = list.map(r => { const x = row(r, r.code || ""), t = autoTags(c, r); if (t.length) x.tags = [...new Set(t)]; return x; });
@@ -122,7 +130,7 @@ export function review(c, r, ctx){
   const dl = dialog({drawer: true, need: "edit", title: "Check and approve", submit: "Approve", danger: "Reject",
     body: `<p class="note" style="margin:0">Sent ${esc(dayShort(r.created_at.slice(0, 10)))} at ${hm(r.created_at)}. Correct anything that's wrong; what you approve is what goes into the system and onto the badge.</p>
       ${d ? `<div class="dup-box">${icon("alert", "ic sm")}<span>Looks like <b>${esc(d.code)} ${esc(d.full_name)}</b>, already registered${d.phone ? `, ${esc(d.phone)}` : ""}.</span>
-        <button type="button" class="ghost small" id="rvSame">Same person, use ${esc(d.code)}</button></div>` : ""}
+        <button type="button" class="ghost small" id="rvSame">Same person, use ${esc(d.code)}</button><button type="button" class="small" id="rvSameP">${icon("print")}Link and print badge</button></div>` : ""}
       <fieldset class="fs"><legend>${icon("user")}Person</legend><div class="form-grid">
         <label>Full name<input name="full_name" required maxlength="200" value="${esc(r.full_name)}" autocomplete="off"></label>
         <label>Name on certificate<input name="cert_name" maxlength="200" value="${esc(r.cert_name)}" placeholder="Same as full name if empty" autocomplete="off"></label>
@@ -147,9 +155,7 @@ export function review(c, r, ctx){
       return await approve(c, [{...r, ...fixed, code}], ctx, {print: !!f.print}) !== false;
     },
     onDanger: async () => { await SB.from("registrations").update({status: "rejected", decided_at: new Date().toISOString()}).eq("id", r.id); toast("Rejected"); await ctx.reload(); }});
-  const same = $("#rvSame", dl);
-  if (same) same.onclick = async () => { await SB.from("registrations").update({status: "approved", attendee_id: d.id, decided_at: new Date().toISOString()}).eq("id", r.id);
-    dl.close(); toast(`Linked to ${d.code} ${d.full_name}`); ctx.reload(); };
+  if (d) for (const [id, print] of [["#rvSame", false], ["#rvSameP", true]]) $(id, dl).onclick = () => { dl.close(); link(c, r, d, ctx, {print}); };
 }
 export function render(el, c, ctx){
   const conf = c.conf, url = regUrl(conf.id), regs = c.regs || [];
@@ -168,7 +174,7 @@ export function render(el, c, ctx){
                 ${r.email ? `<span>${esc(r.email)}</span>` : ""}</div>
               ${ans.length ? `<div class="rq-ans">${ans.map(q => `<span><small>${esc(q.label)}</small>${esc(r.answers[q.id])}</span>`).join("")}</div>` : ""}</div>
             <span class="rq-wait" title="Sent ${esc(dayShort(r.created_at.slice(0, 10)))} ${hm(r.created_at)}">${icon("clock", "ic sm")}${waited(r.created_at)}</span></div>
-          ${d ? `<div class="rq-dup">${icon("alert", "ic sm")}<span>Looks like <b>${esc(d.code)} ${esc(d.full_name)}</b>, already registered</span><button type="button" class="ghost small" data-link="${r.id}" data-to="${d.id}">Same person, use ${esc(d.code)}</button></div>` : ""}
+          ${d ? `<div class="rq-dup">${icon("alert", "ic sm")}<span>Looks like <b>${esc(d.code)} ${esc(d.full_name)}</b>, already registered</span><button type="button" class="ghost small" data-link="${r.id}" data-to="${d.id}">Same person, use ${esc(d.code)}</button><button type="button" class="small" data-link="${r.id}" data-to="${d.id}" data-print="1">${icon("print")}Link and print badge</button></div>` : ""}
           <div class="rq-acts"><button type="button" class="ghost small" data-check="${r.id}">${icon("search")}Check and edit</button><button type="button" class="rq-rej" data-rej="${r.id}">Reject</button>
             <span class="rq-gap"></span><button type="button" class="ghost small" data-okp="${r.id}">${icon("print")}Approve and print</button><button type="button" class="small" data-ok="${r.id}">${icon("check")}Approve</button></div></div>`; }).join("")
         || `<div class="tip"><span class="tip-ic">${icon("attendees")}</span><span><b>No one waiting</b><small>${conf.registration_open ? "Put the desk sign out; requests land here." : "Registration is closed. Open it on the right."}</small></span></div>`}</div></section>
@@ -187,7 +193,7 @@ export function render(el, c, ctx){
   $$("[data-okp]", el).forEach(b => b.onclick = () => { b.disabled = true; approve(c, [find(b.dataset.okp)], ctx, {print: true}); });
   $("#rAll") && ($("#rAll").onclick = e => armed(e.currentTarget, () => approve(c, regs, ctx)));
   $$("[data-rej]", el).forEach(b => b.onclick = () => armed(b, async () => { await SB.from("registrations").update({status: "rejected", decided_at: new Date().toISOString()}).eq("id", b.dataset.rej); toast("Rejected"); ctx.reload(); }));
-  $$("[data-link]", el).forEach(b => b.onclick = async () => { await SB.from("registrations").update({status: "approved", attendee_id: b.dataset.to, decided_at: new Date().toISOString()}).eq("id", b.dataset.link); toast("Linked to the existing attendee"); ctx.reload(); });
+  $$("[data-link]", el).forEach(b => b.onclick = () => { b.disabled = true; link(c, find(b.dataset.link), c.attendees.find(a => a.id === b.dataset.to), ctx, {print: !!b.dataset.print}); });
   $("#rCopy").onclick = () => navigator.clipboard.writeText(url).then(() => toast("Link copied"));
   $("#rToggle").onclick = async () => { const { error } = await SB.from("conferences").update({registration_open: !conf.registration_open}).eq("id", conf.id); if (error) return toast(error.message, "bad");
     toast(conf.registration_open ? "Registration closed" : "Registration open"); ctx.reload(); };

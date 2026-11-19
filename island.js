@@ -1,7 +1,7 @@
 // New-registration island: a pill at the top of every conference page. When someone registers from the desk QR it opens
 // on its own with their details and four actions, so the desk never has to leave the page it is on.
 import {SB, $, esc, state, can, icon, flag, armed, toast} from "./core.js";
-import {approve, dupOf, review, waited} from "./register.js";
+import {approve, dupOf, link, review, waited} from "./register.js";
 
 const POLL = 6000;
 let last = "", shown = null, box = null, confId = null, ctx = null, timer = null, queue = [], seen = new Set(), skipped = new Set(), open = false, busy = false, first = true;
@@ -50,7 +50,8 @@ function draw(){
       <button type="button" class="isl-x" data-isl="min" aria-label="Minimise">${icon("down", "ic sm")}</button></div>
     <button type="button" class="isl-who" data-isl="edit" title="Check and edit the details"><b dir="auto">${esc(r.full_name)}</b>
       <span>${[r.category && esc(r.category), r.entity && esc(r.entity), r.country && `${flag(r.country)}${esc(r.country)}`, r.phone && `<span class="num">${esc(r.phone)}</span>`].filter(Boolean).join(" · ") || "No other details"}</span></button>
-    ${d ? `<p class="isl-dup">${icon("alert", "ic sm")}Looks like ${esc(d.code)} ${esc(d.full_name)}, already registered</p>` : ""}
+    ${d ? `<div class="isl-dup"><p>${icon("alert", "ic sm")}Looks like <b>${esc(d.code)} ${esc(d.full_name)}</b>, already registered</p>
+      <div class="isl-acts two"><button type="button" class="isl-b" data-isl="link">Same person, link</button><button type="button" class="isl-b warn" data-isl="linkprint">${icon("print", "ic sm")}Link and print badge</button></div></div>` : ""}
     <div class="isl-acts"><button type="button" class="isl-b no" data-isl="decline">Decline</button><button type="button" class="isl-b" data-isl="skip">Skip</button>
       <button type="button" class="isl-b" data-isl="add">${icon("check", "ic sm")}Add</button><button type="button" class="isl-b go" data-isl="print">${icon("print", "ic sm")}Add and print</button></div></div>`, pop);
 }
@@ -71,6 +72,7 @@ document.addEventListener("click", async e => {
   if (k === "decline") return armed(b, () => act(r, async () => {
     const { error } = await SB.from("registrations").update({status: "rejected", decided_at: new Date().toISOString()}).eq("id", r.id);
     if (error) throw error; toast(`${r.full_name} declined`); }));
+  if (k === "link" || k === "linkprint") { const a = dupOf(state.c, r); if (a) return act(r, () => link(state.c, r, a, {reload: async () => {}}, {print: k === "linkprint"})); }
   if (k === "add" || k === "print") return act(r, () => approve(state.c, [r], {reload: async () => {}}, {print: k === "print"}));
 });
 // Take the request off the island, then refresh the conference so IDs, counts and lists follow.
