@@ -106,13 +106,13 @@ const row = (r, code) => ({conference_id: r.conference_id, code, full_name: r.fu
 // Yes/no questions can tag the person ("Will you attend the workshop?" Yes → Workshop).
 const autoTags = (c, r) => formOf(c.conf).questions.filter(q => q.type === "yesno" && q.tag_on_yes && (r.answers || {})[q.id] === "Yes").map(q => q.tag_on_yes.trim()).filter(Boolean);
 export async function approve(c, list, ctx, {print = false} = {}){
-  let n = Number(nextCode(c));
-  const rows = list.map(r => { const x = row(r, r.code || String(n++).padStart(4, "0")), t = autoTags(c, r); if (t.length) x.tags = [...new Set(t)]; return x; });
+  // An empty code lets the database give the next free ID, so two desks approving at once never collide.
+  const rows = list.map(r => { const x = row(r, r.code || ""), t = autoTags(c, r); if (t.length) x.tags = [...new Set(t)]; return x; });
   const { data: made, error } = await SB.from("attendees").insert(rows).select("*");
   if (error) { toast(error.message, "bad"); return false; }
-  const byCode = new Map(made.map(a => [a.code, a])), at = new Date().toISOString();
-  await Promise.all(list.map((r, i) => SB.from("registrations").update({status: "approved", attendee_id: byCode.get(rows[i].code)?.id, decided_at: at}).eq("id", r.id)));
-  toast(list.length === 1 ? `${list[0].full_name} approved with ID ${rows[0].code}` : `${list.length} approved`);
+  const at = new Date().toISOString(); // rows come back in the order they were sent
+  await Promise.all(list.map((r, i) => SB.from("registrations").update({status: "approved", attendee_id: made[i]?.id, decided_at: at}).eq("id", r.id)));
+  toast(list.length === 1 ? `${list[0].full_name} approved with ID ${made[0].code}` : `${list.length} approved`);
   if (print) await printDocs(c, "badge", made);
   await ctx.reload();
 }
@@ -126,7 +126,7 @@ export function review(c, r, ctx){
       <fieldset class="fs"><legend>${icon("user")}Person</legend><div class="form-grid">
         <label>Full name<input name="full_name" required maxlength="200" value="${esc(r.full_name)}" autocomplete="off"></label>
         <label>Name on certificate<input name="cert_name" maxlength="200" value="${esc(r.cert_name)}" placeholder="Same as full name if empty" autocomplete="off"></label>
-        <label>Badge ID<input name="code" required pattern="[A-Za-z0-9\\-]{1,32}" title="Letters, numbers and dashes only, up to 32" maxlength="32" value="${esc(nextCode(c))}" class="num" autocomplete="off">
+        <label>Badge ID<input name="code" required pattern="[A-Za-z0-9\\-]{1,32}" title="Letters, numbers and dashes only, up to 32" maxlength="32" value="${esc(nextCode(c))}" data-auto="${esc(nextCode(c))}" class="num" autocomplete="off">
           <small class="hint">The next free ID. Change it to use a pre-printed badge.</small></label>
         <label>Category<select name="category">${selectOptions(cats, r.category || "", "No category")}</select></label></div></fieldset>
       <fieldset class="fs"><legend>${icon("link")}Contact</legend><div class="form-grid">
@@ -136,9 +136,9 @@ export function review(c, r, ctx){
         ${countryPicker("country", r.country || "", countriesOf(c.conf))}</div></fieldset>
       ${form.questions.length ? `<fieldset class="fs"><legend>${icon("tag")}Their answers</legend><div class="form-grid">${form.questions.map(q => questionInput({...q, required: false}, (r.answers || {})[q.id] || "")).join("")}</div></fieldset>` : ""}
       <label class="check"><input type="checkbox" name="print" checked> Print the badge after approving</label>`,
-    onSubmit: async form => {
-      const f = formData(form), code = f.code.trim();
-      const clash = c.attendees.find(a => a.code === code);
+    onSubmit: async fe => {
+      const f = formData(fe), code = f.code.trim() === fe.code.dataset.auto ? "" : f.code.trim(); // unchanged: the database picks the next free ID
+      const clash = code && c.attendees.find(a => a.code === code);
       if (clash) { toast(`ID ${code} already belongs to ${clash.full_name}. Pick another.`, "bad"); return false; }
       const fixed = {full_name: f.full_name.trim(), cert_name: f.cert_name.trim(), phone: f.phone.trim(), email: f.email.trim(), category: f.category, entity: f.entity.trim(), country: f.country};
       if (form.questions.length) fixed.answers = {...(r.answers || {}), ...answersFrom(form, $("form", dl))};

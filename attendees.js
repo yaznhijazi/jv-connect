@@ -166,7 +166,7 @@ function pasteDialog(c, ctx){
       <div id="plPrev" class="pl-prev" aria-live="polite"></div>`,
     onSubmit: async form => {
       const list = plan(); if (!list.add.length) { toast("Paste at least one new name.", "bad"); return false; }
-      const f = formData(form), rows = list.add.map(x => ({conference_id: c.conf.id, code: x.code, full_name: x.name, category: f.category || "", country: f.country || "", fee_amount: 0, fee_paid: false, fee_note: "Added from a pasted list", ...(cleanTag(f.tag) ? {tags: [cleanTag(f.tag)]} : {})}));
+      const f = formData(form), rows = list.add.map(x => ({conference_id: c.conf.id, code: "", full_name: x.name, category: f.category || "", country: f.country || "", fee_amount: 0, fee_paid: false, fee_note: "Added from a pasted list", ...(cleanTag(f.tag) ? {tags: [cleanTag(f.tag)]} : {})}));
       const { data: made, error } = await SB.from("attendees").insert(rows).select();
       if (error) throw error;
       await ctx.reload();
@@ -213,7 +213,7 @@ function personDialog(c, a, ctx){
       <fieldset class="fs"><legend>${icon("user")}Person</legend><div class="form-grid">
         <label>Full name<input name="full_name" required maxlength="200" value="${esc(a?.full_name)}" placeholder="As it should appear on the badge" autocomplete="off"></label>
         <label>Name on certificate<input name="cert_name" maxlength="200" value="${esc(a?.cert_name)}" placeholder="Same as full name if empty" autocomplete="off"></label>
-        <label>Badge ID<input name="code" required pattern="[A-Za-z0-9\\-]{1,32}" title="Letters, numbers and dashes only, up to 32" maxlength="32" value="${esc(a?.code ?? nextCode(c))}" class="num" autocomplete="off">
+        <label>Badge ID<input name="code" required pattern="[A-Za-z0-9\\-]{1,32}" title="Letters, numbers and dashes only, up to 32" maxlength="32" value="${esc(a?.code ?? nextCode(c))}" ${a ? "" : `data-auto="${esc(nextCode(c))}"`} class="num" autocomplete="off">
           ${a ? "" : '<small class="hint">The next free ID. Change it if the badge is already printed.</small>'}</label>
         <label>Category<select name="category">${selectOptions(categoriesOf(c), a?.category || "", "No category")}</select></label></div></fieldset>
       <fieldset class="fs"><legend>${icon("link")}Contact</legend><div class="form-grid">
@@ -243,7 +243,9 @@ function personDialog(c, a, ctx){
       if (!can("manage")) { delete row.fee_amount; delete row.fee_paid; delete row.fee_note; } // staff: fees stay as they are (the database checks this too)
       row.tags = tagsFrom(form);
       if (rf.questions.length) { const ans = {...(a?.answers || {})}; for (const q of rf.questions) delete ans[q.id]; row.answers = {...ans, ...answersFrom(rf, form)}; }
-      const clash = c.attendees.find(x => x.code === row.code && x.id !== a?.id);
+      // Left at the suggested ID: the database hands out the next free one, so two desks adding at once never collide.
+      if (!a && row.code === form.code.dataset.auto) row.code = "";
+      const clash = row.code && c.attendees.find(x => x.code === row.code && x.id !== a?.id);
       if (clash) { toast(`ID ${row.code} already belongs to ${clash.full_name}.`, "bad"); return false; }
       const { data: made, error } = a ? await SB.from("attendees").update(row).eq("id", a.id).select().maybeSingle() : await SB.from("attendees").insert(row).select().single();
       if (error) throw error;
@@ -307,15 +309,14 @@ async function readPhoto(c, ctx, d, file){
         <select data-k="category" aria-label="Category">${selectOptions(cats, cats.includes(p.category) ? p.category : "", "No category")}</select>${dup ? '<span class="pill warn">Already added</span>' : ""}</div>`; }).join("")}</div>
       <button type="button" id="photoGo" style="margin-top:12px">Add the ticked people</button>`;
     $("#photoGo", d).onclick = async ev => {
-      let n = Number(nextCode(c));
       const rows = $$("[data-pr]", d).filter(r => $("input[type=checkbox]", r).checked).map(r => { const p = people[Number(r.dataset.pr)], v = k => $(`[data-k=${k}]`, r).value.trim();
-        return {conference_id: c.conf.id, code: String(n++).padStart(4, "0"), full_name: v("full_name"), cert_name: "", phone: v("phone"), email: p.email, entity: v("entity"),
+        return {conference_id: c.conf.id, code: "", full_name: v("full_name"), cert_name: "", phone: v("phone"), email: p.email, entity: v("entity"),
           category: v("category"), country: p.country, fee_amount: 0, fee_paid: false, fee_note: "From a photo"}; }).filter(r => r.full_name.length >= 2);
       if (!rows.length) return toast("Tick at least one person.", "bad");
       ev.target.disabled = true;
-      const { error } = await SB.from("attendees").insert(rows);
+      const { data: made, error } = await SB.from("attendees").insert(rows).select("code");
       if (error) { ev.target.disabled = false; return toast(error.message, "bad"); }
-      d.close(); toast(`${rows.length} added, IDs ${rows[0].code} to ${rows.at(-1).code}`); ctx.reload();
+      d.close(); toast(`${made.length} added, IDs ${made[0].code} to ${made.at(-1).code}`); ctx.reload();
     };
   } catch (err) { box.innerHTML = `<p style="color:var(--bad);font-weight:600">${esc(err.message || err)}</p>`; }
 }
