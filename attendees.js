@@ -133,16 +133,14 @@ export function quickActions(c, a, ctx){
   const d = dialog({title: "Added", submit: "",
     body: `<div class="qa-done"><span class="qa-tick">${icon("check")}</span><div><b>${esc(a.full_name)}</b><span>is in, with badge ID</span></div><b class="qa-id num">${esc(a.code)}</b></div>
       <div class="qa-grid">
-        <button type="button" class="qx big" data-qa-do="print">${icon("print")}<span><b>Print badge</b><small>Send it to the printer now</small></span></button>
-        <button type="button" class="qx" data-qa-do="text">${icon("print")}<span><b>Badge, text only</b><small>On a pre-printed card</small></span></button>
+        <button type="button" class="qx big" data-qa-do="print">${icon("print")}<span><b>Print badge</b><small>Text only, on the pre-printed card</small></span></button>
         <button type="button" class="qx" data-qa-do="pdf">${icon("download")}<span><b>Badge PDF</b><small>To send on WhatsApp</small></span></button>
         <button type="button" class="qx" data-qa-do="link">${icon("link")}<span><b>Copy phone badge link</b><small>Their badge on their phone</small></span></button>
         <button type="button" class="qx" data-qa-do="open">${icon("user")}<span><b>Open their details</b><small>Check in, certificate, fees</small></span></button>
         <button type="button" class="qx" data-qa-do="another">${icon("plus")}<span><b>Add another</b><small>Next free ID ${esc(nextCode(c))}</small></span></button></div>`});
   $$("[data-qa-do]", d).forEach(b => b.onclick = async () => {
     const k = b.dataset.qaDo;
-    if (k === "print") { d.close(); return printDocs(c, "badge", [a]); }
-    if (k === "text") { d.close(); return printDocs(c, "badge", [a], {full: false}); }
+    if (k === "print") { d.close(); return printDocs(c, "badge", [a], {full: false}); } // pre-printed cards: just the text
     if (k === "pdf") { b.disabled = true; try { const url = URL.createObjectURL(await certPdf(c, [{...a, cert_name: a.cert_name || a.full_name}], {kind: "badge"}));
       Object.assign(document.createElement("a"), {href: url, download: `Badge ${a.code} - ${a.full_name}.pdf`}).click(); setTimeout(() => URL.revokeObjectURL(url), 4000); } catch (err) { toast(err.message, "bad"); } b.disabled = false; return; }
     if (k === "link") return navigator.clipboard.writeText(badgeUrl(c.conf.id, a.code)).then(() => toast("Link copied. Send it to them on WhatsApp."), () => toast("Couldn't copy the link.", "bad"));
