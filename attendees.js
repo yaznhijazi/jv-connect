@@ -121,7 +121,7 @@ export function render(el, c, ctx){
       if (!to.length) return toast("None of them has an email.", "bad");
       return armed(b, async () => { b.disabled = true;
         const r = await emailMany(c, to, {onStep: (i, n) => { b.textContent = `Sending ${i + 1} of ${n}…`; }});
-        toast(`${r.ok} certificate${r.ok === 1 ? "" : "s"} emailed${to.length < sel.length ? `, ${sel.length - to.length} had no email` : ""}${r.bad.length ? `, ${r.bad.length} not sent` : ""}`, r.bad.length ? "bad" : "");
+        toast(`${r.ok} certificate${r.ok === 1 ? "" : "s"} emailed${r.skipped ? `, ${r.skipped} already had theirs` : ""}${to.length < sel.length ? `, ${sel.length - to.length} had no email` : ""}${r.bad.length ? `, ${r.bad.length} not sent` : ""}`, r.bad.length ? "bad" : "");
         await ctx.reload(); }); }
     if (k === "paid" || k === "unpaid") { const { error } = await SB.from("attendees").update({fee_paid: k === "paid"}).in("id", ids); if (error) return toast(error.message, "bad"); toast(`${ids.length} marked ${k === "paid" ? "paid" : "not paid"}`); return ctx.reload(); }
     if (k === "delete") return armed(b, async () => { const { error } = await SB.from("attendees").delete().in("id", ids); if (error) return toast(error.message, "bad"); view.sel.clear(); toast(`${ids.length} deleted`); ctx.reload(); });

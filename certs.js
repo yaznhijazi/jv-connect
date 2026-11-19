@@ -240,15 +240,22 @@ export async function emailWorkshops(c, a){
   return {count: ws.length};
 }
 // One at a time, so a long list never trips Gmail; stops at Gmail's daily limit or when stop() says so.
+// Never twice: skips whoever already has theirs (checked again in the database, in case another device just sent it),
+// and a second registration of the same person with the same email.
 export async function emailMany(c, people, {onStep, stop} = {}){
-  let ok = 0; const bad = [];
+  let ok = 0; const bad = [], ids = people.map(a => a.id), fresh = new Map();
+  for (let i = 0; i < ids.length; i += 300) { const { data } = await SB.from("attendees").select("id,cert_sent").in("id", ids.slice(i, i + 300)); (data || []).forEach(r => fresh.set(r.id, r.cert_sent)); }
+  const key = a => `${clean(a.email).toLowerCase()}|${String(a.cert_name || a.full_name).toLowerCase().replace(/[^\p{L}]/gu, "")}`;
+  const got = new Set(c.attendees.filter(a => mainSent(a) || fresh.get(a.id)?.[MAIN]).map(key));
+  const todo = people.filter(a => { if (fresh.has(a.id)) a.cert_sent = fresh.get(a.id); return !mainSent(a); }).filter(a => !got.has(key(a)) && got.add(key(a)));
+  const skipped = people.length - todo.length; people = todo;
   for (const [i, a] of people.entries()) {
     if (stop?.()) break;
     onStep?.(i, people.length, a);
     const r = await emailMain(c, a);
     if (r.error) { bad.push(`${a.code} ${a.full_name}: ${r.error}`); if (r.limit) break; } else ok++;
   }
-  return {ok, bad};
+  return {ok, bad, skipped};
 }
 let mailing = null; // {stop}
 const cm = {who: ""};
@@ -331,7 +338,7 @@ function wireMain(el, c, ctx){
     const r = await emailMany(c, left, {stop: () => mailing.stopped, onStep: (i, n, a) => {
       note.textContent = `Sending ${i + 1} of ${n}: ${a.cert_name || a.full_name}…`; bar.style.width = Math.round((base + i) / withMail.length * 100) + "%"; }});
     mailing = null;
-    toast(`${r.ok} certificate${r.ok === 1 ? "" : "s"} emailed${r.bad.length ? `, ${r.bad.length} not sent` : ""}`, r.bad.length ? "bad" : "");
+    toast(`${r.ok} certificate${r.ok === 1 ? "" : "s"} emailed${r.skipped ? `, ${r.skipped} already had theirs` : ""}${r.bad.length ? `, ${r.bad.length} not sent` : ""}`, r.bad.length ? "bad" : "");
     await ctx.reload();
     if (r.bad.length) setTimeout(() => { const n = $("#cmNote"); if (n) n.textContent = "Not sent: " + r.bad.slice(0, 5).join("; ") + (r.bad.length > 5 ? ` and ${r.bad.length - 5} more` : ""); }, 50);
   });

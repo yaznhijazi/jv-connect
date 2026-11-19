@@ -8,6 +8,7 @@ import * as registerPage from "./register.js";
 import * as certsPage from "./certs.js";
 import * as island from "./island.js";
 import * as kiosk from "./kiosk.js";
+import * as voice from "./voice.js";
 
 const app = $("#app");
 // [route, label, icon, one-line purpose shown under the page title]
@@ -50,6 +51,7 @@ function shell({conf = null, page = "", title, sub = "", actions = ""}){
     ${conf ? `<nav class="bottomnav" aria-label="Sections">${MOBILE.filter(k => tabsFor().some(t => t[0] === k)).map(k => { const t = TABS.find(x => x[0] === k);
       return `<a href="#/c/${conf.id}/${k}" ${k === page ? 'aria-current="page"' : ""}>${icon(t[2])}<span>${t[1]}</span></a>`; }).join("")}
       <button type="button" id="moreNav" ${MOBILE.includes(page) ? "" : 'aria-current="page"'}>${icon("more")}<span>More</span></button></nav>` : ""}
+    ${conf && can("edit") ? voice.button() : ""}
   </div>`;
 }
 document.addEventListener("click", e => {
@@ -261,7 +263,7 @@ async function renderConf(id, page){
   curCtx = {reload: async () => { await loadConf(id, {force: true}); return route(); }};
   await pages[page](el, c, curCtx);
   // A decision on the island refreshes the data; the page redraws unless a form is open on it.
-  kiosk.bgWatch(id);
+  kiosk.bgWatch(id); voice.wire();
   island.watch(id, {reload: async () => { await loadConf(id, {force: true}); setTimeout(() => { if (!$("dialog[open]")) route(); }, 400); }});
   if (my !== routeN) return;
   if (pending) { const fn = pending; pending = null; fn(); }
