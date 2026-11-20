@@ -3,7 +3,7 @@
 // Station (team login): a laptop with a printer. It takes the next job from the queue and prints it with no dialog
 // (Chrome started with --kiosk-printing). Three stations share one queue; each job goes to whichever is free.
 import {SB, $, $$, esc, dateRange, icon, toast, armed, qrSvg, store, state, loadConf, initials, dayShort, hm, dialog, can} from "./core.js";
-import {printDocs, printFonts, certPdf, certName} from "./print.js";
+import {printDocs, printFonts, certPdf, certName, apprFor} from "./print.js";
 import {tableSign} from "./certs.js";
 
 const base = () => location.href.split("#")[0];
@@ -182,12 +182,12 @@ export async function renderKiosk(app, confId){
   const show = async (p, name, email) => {
     clearTimeout(resetT); clearInterval(pollT);
     const c = {conf: f, layouts: f.layouts || []}, person = {code: p.code, full_name: name, cert_name: name, category: p.category};
-    let stage = "make", sent = "", err = "", from = {name: f.name, email: ""};
+    let stage = "make", sent = "", err = "", from = {name: f.name, email: ""}, two = false;
     const draw = () => {
       const done = stage === "sent", failed = stage === "error";
       frame(3, `<div class="ks-center ks-mail ${done ? "done" : ""}">
         <div class="ks-env ${done ? "done" : failed ? "" : "busy"}" aria-hidden="true">${icon(done ? "check" : failed ? "alert" : "mail", "ic lg")}</div>
-        <h1>${done ? T("Your certificate is on its way", "شهادتك في الطريق إليك") : failed ? T("It wasn't sent", "لم تُرسل") : stage === "send" ? T("Sending…", "جاري الإرسال…") : T("Making your certificate…", "جاري تجهيز شهادتك…")}</h1>
+        <h1>${done ? (two ? T("Your 2 certificates are on their way", "شهادتاك في الطريق إليك") : T("Your certificate is on its way", "شهادتك في الطريق إليك")) : failed ? T("It wasn't sent", "لم تُرسل") : stage === "send" ? T("Sending…", "جاري الإرسال…") : T("Making your certificate…", "جاري تجهيز شهادتك…")}</h1>
         <p class="ks-status">${done ? T(`Sent to <b dir="ltr">${esc(sent)}</b>`, `أُرسلت إلى <b dir="ltr">${esc(sent)}</b>`) : failed ? esc(err)
           : T(`To <b dir="ltr">${esc(email || p.email_hint)}</b>`, `إلى <b dir="ltr">${esc(email || p.email_hint)}</b>`)}</p>
         ${done ? `<div class="ks-spam">${icon("alert", "ic sm")}<div><b>${T("Not in your inbox? Check Spam or Junk.", "لم تجدها؟ تفقّد مجلد البريد المزعج (Spam / Junk).")}</b>
@@ -200,17 +200,18 @@ export async function renderKiosk(app, confId){
     const go = async () => {
       stage = "make"; err = ""; view = draw; draw();
       try {
-        const pdf = await certPdf(c, [person]);
+        // Speakers get both in the same email: the attendance certificate and the appreciation one.
+        const toB64 = blob => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(",")[1]); fr.readAsDataURL(blob); });
+        const pdf = await toB64(await certPdf(c, [person])), pdf2 = apprFor(c, person) ? await toB64(await certPdf(c, [person], {kind: "appreciation"})) : "";
         stage = "send"; draw();
-        const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(",")[1]); fr.readAsDataURL(pdf); });
-        const { data, error } = await SB.functions.invoke("cert-digital", {body: {conf: confId, code: p.code, name, email, pdf: b64}});
+        const { data, error } = await SB.functions.invoke("cert-digital", {body: {conf: confId, code: p.code, name, email, pdf, ...(pdf2 ? {pdf2} : {})}});
         if (error || !data?.ok) {
           let j = {}; try { j = await error.context.json(); } catch {}
           if (j.code === "review") return review(p, name, j.registered);
           if (j.code === "closed") return closed();
           stage = "error"; err = j.error || T("No connection. Try again.", "لا يوجد اتصال. حاول مرة أخرى."); return draw();
         }
-        stage = "sent"; sent = data.email_hint; from = {name: data.from_name || f.name, email: data.from_email || ""}; draw(); later(() => askId(), 25000);
+        stage = "sent"; sent = data.email_hint; two = !!data.both; from = {name: data.from_name || f.name, email: data.from_email || ""}; draw(); later(() => askId(), 25000);
       } catch (e) { stage = "error"; err = T("The certificate couldn't be made on this phone. Please ask at the desk.", "تعذر تجهيز الشهادة على هذا الجهاز، يرجى السؤال في المكتب."); draw(); }
     };
     go();
