@@ -50,9 +50,12 @@ export function certKind(c, a){
 }
 export const layoutFor = (c, kind) => { const saved = c.layouts.find(l => l.kind === kind)?.layout; return saved ? {...clone(DEFAULTS[kind]), ...saved} : clone(DEFAULTS[kind]); };
 
-function value(f, a, c){
+// On the attendance certificate a speaker's name reads "Name (Speaker)"; badges, workshop and appreciation certificates are unchanged.
+export const certName = (a, kind) => { const n = a.cert_name || a.full_name || "";
+  return kind === "certificate" && a.category === "Speaker" && !/\(speaker\)\s*$/i.test(n) ? `${n} (Speaker)` : n; };
+function value(f, a, c, kind){
   if (f.key === "custom") return f.text || "";
-  if (f.key === "cert_name") return a.cert_name || a.full_name;
+  if (f.key === "cert_name") return certName(a, kind);
   if (f.key === "conf_name") return c.conf.name;
   if (f.key === "conf_dates") return dateRange(c.conf.start_date, c.conf.end_date);
   if (f.key === "venue") return c.conf.venue;
@@ -83,7 +86,7 @@ export async function certPdf(c, people, {kind = "", onPage = null, onCanvas = n
     for (const [i, a] of people.entries()) {
       onPage?.(i + 1, people.length);
       const L = Lof(a), land = L.w > L.h;
-      host.innerHTML = `<div class="paper" style="width:${L.w}mm;height:${L.h}mm;${L.bg ? `background:#fff url('${L.bg}') center/100% 100% no-repeat;` : ""}">${L.fields.map(f => fieldHtml(f, a, c)).join("")}</div>`;
+      host.innerHTML = `<div class="paper" style="width:${L.w}mm;height:${L.h}mm;${L.bg ? `background:#fff url('${L.bg}') center/100% 100% no-repeat;` : ""}">${L.fields.map(f => fieldHtml(f, a, c, {kind: kind || certKind(c, a)})).join("")}</div>`;
       fitText(host);
       const cv = await window.html2canvas(host.firstChild, {scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false});
       onCanvas?.(cv, i);
@@ -94,14 +97,14 @@ export async function certPdf(c, people, {kind = "", onPage = null, onCanvas = n
   return doc.output("blob");
 }
 // One field as HTML, positioned in mm. dx/dy: printer offset (print only).
-function fieldHtml(f, a, c, {dx = 0, dy = 0, editing = false} = {}){
+function fieldHtml(f, a, c, {dx = 0, dy = 0, editing = false, kind = ""} = {}){
   if (!f.show && !editing) return "";
   const pos = `left:${f.x + dx}mm;top:${f.y + dy}mm;width:${f.w}mm;${f.type !== "text" ? `height:${f.h}mm;` : ""}${!f.show ? "opacity:.25;" : ""}`;
   const data = editing ? ` data-f="${f.id}"` : "";
   if (f.type === "qr") return `<div class="fld"${data} style="${pos}">${qrSvg(value(f, a, c) || "0000")}</div>`;
   if (f.type === "barcode") return `<div class="fld"${data} style="${pos}">${barcodeSvg(value(f, a, c) || "0000")}</div>`;
   const style = `${pos}font-family:'${f.font}',sans-serif;font-size:${f.size}pt;font-weight:${f.weight};text-align:${f.align};color:${f.color};${f.upper ? "text-transform:uppercase;letter-spacing:.04em;" : ""}${f.fit ? "white-space:nowrap;" : ""}`;
-  return `<div class="fld"${data}${f.fit ? ` data-fit="${f.size}"` : ""} dir="auto" style="${style}">${esc(value(f, a, c)) || (editing ? `<span style="opacity:.35">${esc(KEYS.find(k => k[0] === f.key)?.[1] || "")}</span>` : "")}</div>`;
+  return `<div class="fld"${data}${f.fit ? ` data-fit="${f.size}"` : ""} dir="auto" style="${style}">${esc(value(f, a, c, kind)) || (editing ? `<span style="opacity:.35">${esc(KEYS.find(k => k[0] === f.key)?.[1] || "")}</span>` : "")}</div>`;
 }
 
 // Fields marked "fit" stay on one line: the text shrinks until it fits its box (long names on certificates).
@@ -141,7 +144,7 @@ export async function printDocs(c, kind, people, {test = false, sheet = false, e
   const card = a => { const L = Lof(a); return `<div class="print-page" style="width:${L.w}mm;height:${L.h}mm">
     ${(full ?? L.printBg) && L.bg ? `<img class="print-bg" src="${esc(L.bg)}" alt="" style="left:${L.offsetX}mm;top:${L.offsetY}mm;width:${L.w}mm;height:${L.h}mm">` : ""}
     ${test ? `<div style="position:absolute;inset:${L.offsetY}mm ${-L.offsetX}mm ${-L.offsetY}mm ${L.offsetX}mm;outline:.3mm dashed #999"></div>` : ""}
-    ${L.fields.map(f => fieldHtml(f, a, c, {dx: L.offsetX, dy: L.offsetY})).join("")}</div>`; };
+    ${L.fields.map(f => fieldHtml(f, a, c, {dx: L.offsetX, dy: L.offsetY, kind: kind === "certificate" && !exact ? certKind(c, a) : kind})).join("")}</div>`; };
   if (nUp) {
     const sheets = []; for (let i = 0; i < people.length; i += S.n) sheets.push(people.slice(i, i + S.n));
     // Cards are centred on the sheet so the printer's unprintable edge falls in the margin.

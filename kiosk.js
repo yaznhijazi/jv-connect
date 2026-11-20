@@ -3,7 +3,7 @@
 // Station (team login): a laptop with a printer. It takes the next job from the queue and prints it with no dialog
 // (Chrome started with --kiosk-printing). Three stations share one queue; each job goes to whichever is free.
 import {SB, $, $$, esc, dateRange, icon, toast, armed, qrSvg, store, state, loadConf, initials, dayShort, hm, dialog, can} from "./core.js";
-import {printDocs, printFonts, certPdf} from "./print.js";
+import {printDocs, printFonts, certPdf, certName} from "./print.js";
 import {tableSign} from "./certs.js";
 
 const base = () => location.href.split("#")[0];
@@ -64,7 +64,7 @@ export async function renderKiosk(app, confId){
     if (!nf) return "";
     const pct = (v, of) => (v / of * 100).toFixed(3) + "%", cq = pt => (pt * .3528 / L.w * 100).toFixed(3) + "cqw";
     return `<div class="ks-prev" style="aspect-ratio:${L.w}/${L.h}"><img src="${esc(L.bg)}" alt="">
-      <div class="ks-prev-name" id="ksPrevName" dir="auto" data-pt="${nf.size}" style="left:${pct(nf.x, L.w)};top:${pct(nf.y, L.h)};width:${pct(nf.w, L.w)};font-size:${cq(nf.size)};font-weight:${nf.weight};color:${esc(nf.color)};text-align:${nf.align};font-family:'${esc(nf.font)}',Cairo,sans-serif;${nf.upper ? "text-transform:uppercase;" : ""}">${esc(name)}</div></div>`;
+      <div class="ks-prev-name" id="ksPrevName" dir="auto" data-pt="${nf.size}" data-sp="${L === ls.find(l => l.kind === "certificate")?.layout && p.category === "Speaker" ? 1 : ""}" style="left:${pct(nf.x, L.w)};top:${pct(nf.y, L.h)};width:${pct(nf.w, L.w)};font-size:${cq(nf.size)};font-weight:${nf.weight};color:${esc(nf.color)};text-align:${nf.align};font-family:'${esc(nf.font)}',Cairo,sans-serif;${nf.upper ? "text-transform:uppercase;" : ""}">${esc(certName({cert_name: name, category: p.category}, L === ls.find(l => l.kind === "certificate")?.layout ? "certificate" : ""))}</div></div>`;
   };
   const fitPrev = () => { const el = $("#ksPrevName"); if (!el) return; let s = parseFloat(el.style.fontSize);
     while (el.scrollWidth > el.clientWidth + 1 && s > 1) { s -= .1; el.style.fontSize = s.toFixed(2) + "cqw"; } };
@@ -107,7 +107,7 @@ export async function renderKiosk(app, confId){
     $("#ksMail") && ($("#ksMail").oninput = e => { st.email = e.target.value; });
     if (st.editName) { const n = $("#ksName"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
     else if (st.editMail && !noMail) $("#ksMail")?.focus();
-    $("#ksName") && ($("#ksName").oninput = e => { const el = $("#ksPrevName"); if (el) { el.textContent = e.target.value || " "; el.style.fontSize = (parseFloat(el.dataset.pt) * .3528 / ((f.layouts.find(l => l.kind === "certificate")?.layout?.w) || 297) * 100).toFixed(3) + "cqw"; fitPrev(); } });
+    $("#ksName") && ($("#ksName").oninput = e => { const el = $("#ksPrevName"); if (el) { el.textContent = (e.target.value || " ") + (el.dataset.sp && e.target.value ? " (Speaker)" : ""); el.style.fontSize = (parseFloat(el.dataset.pt) * .3528 / ((f.layouts.find(l => l.kind === "certificate")?.layout?.w) || 297) * 100).toFixed(3) + "cqw"; fitPrev(); } });
     document.fonts.ready.then(fitPrev); fitPrev();
     const email = () => $("#ksMail") ? clean($("#ksMail").value).toLowerCase() : "";
     const bad = () => { const e = email(); if (e && !EMAIL.test(e)) { $(".ks-err").textContent = T("That email doesn't look right.", "البريد الإلكتروني غير صحيح."); return true; } };
