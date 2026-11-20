@@ -227,6 +227,18 @@ export async function emailMain(c, a){
   await SB.from("attendees").update({cert_sent: sent}).eq("id", a.id); a.cert_sent = sent;
   return {};
 }
+// The appreciation certificate (speakers), its own email, remembered as cert_sent.appreciation.
+export const APPR = "appreciation";
+export async function emailAppreciation(c, a){
+  const name = a.cert_name || a.full_name, to = clean(a.email).toLowerCase(), what = "certificate of appreciation";
+  const { data, error } = await SB.functions.invoke("send-certificate", {body: {to, name, subject: `Your ${what}`,
+    text: `Dear ${name},\n\nThank you for your valuable contribution as a speaker at ${c.conf.name}. Your ${what} is attached as a PDF.\n\nBest regards,\nThe organising committee`,
+    workshops: [], event: c.conf.name, filename: fileName(name), pdf: await b64(await certPdf(c, [{...a, cert_name: name}], {kind: "appreciation"}))}});
+  if (error || !data?.ok) { let msg = error?.message || "Not sent."; try { msg = (await error.context.json()).error || msg; } catch {} return {error: msg}; }
+  const sent = {...(a.cert_sent || {}), [APPR]: {at: new Date().toISOString(), email: to, name}};
+  await SB.from("attendees").update({cert_sent: sent}).eq("id", a.id); a.cert_sent = sent;
+  return {};
+}
 // Every workshop certificate a person is tagged for, as one email with a page per workshop. Sending again is allowed.
 export async function emailWorkshops(c, a){
   const ws = selfOf(c).workshops.filter(w => (a.tags || []).includes(w.tag));
@@ -350,7 +362,7 @@ const toSend = c => { const ws = selfOf(c).workshops;
   return c.attendees.map(a => ({a, todo: ws.filter(w => (a.tags || []).includes(w.tag) && !(a.cert_sent || {})[w.id])})).filter(x => x.todo.length); };
 const sentList = c => c.attendees.flatMap(a => Object.entries(a.cert_sent || {}).map(([wid, v]) => ({a, wid, ...v}))).sort((x, y) => String(y.at).localeCompare(String(x.at)));
 function selfPanel(c){
-  const cs = selfOf(c), sent = sentList(c), title = id => id === MAIN ? "Certificate of attendance" : cs.workshops.find(w => w.id === id)?.title || "Removed workshop";
+  const cs = selfOf(c), sent = sentList(c), title = id => id === MAIN ? "Certificate of attendance" : id === APPR ? "Certificate of appreciation" : cs.workshops.find(w => w.id === id)?.title || "Removed workshop";
   const count = w => c.attendees.filter(a => (a.tags || []).includes(w.tag)).length;
   return `<section class="panel form" id="msPanel"><div class="panel-head" style="margin:0"><h2>Certificate by badge ID</h2><span class="pill ${cs.open ? "ok live" : ""}">${cs.open ? "Open" : "Closed"}</span></div>
     <p class="note" style="margin:0">People scan the QR, type their badge ID, confirm their name, add an email if we don't have one, and get all their workshop certificates by email. They can send them again at any time.</p>

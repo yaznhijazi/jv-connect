@@ -43,10 +43,12 @@ DEFAULTS.workshop = {...clone(DEFAULTS.certificate), fields: DEFAULTS.certificat
 export const KINDS = [["badge", "Badge"], ["certificate", "Attendance certificate"], ["appreciation", "Appreciation certificate"], ["workshop", "Workshop certificate"]];
 export const workshopsOf = c => c.conf.cert_self?.workshops || [];
 // Which certificate someone gets: appreciation if that layout is set up and covers their category, else attendance.
-export function certKind(c, a){
+// Everyone's certificate is the attendance one. The appreciation certificate is an extra one for its categories
+// (speakers), sent and printed from its own buttons, once it has a design.
+export function certKind(){ return "certificate"; }
+export function apprFor(c, a){
   const ap = c.layouts.find(l => l.kind === "appreciation")?.layout;
-  // Until the appreciation certificate has a design, everyone gets the attendance one (no blank pages).
-  return ap?.bg && (ap.categories || ["Speaker"]).includes(a?.category) ? "appreciation" : "certificate";
+  return !!(ap?.bg && (ap.categories || ["Speaker"]).includes(a?.category));
 }
 export const layoutFor = (c, kind) => { const saved = c.layouts.find(l => l.kind === kind)?.layout; return saved ? {...clone(DEFAULTS[kind]), ...saved} : clone(DEFAULTS[kind]); };
 
