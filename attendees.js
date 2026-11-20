@@ -220,7 +220,13 @@ function pasteDialog(c, ctx){
 
 /* ---------- one attendee ---------- */
 export function openPerson(c, a, ctx){ return personDialog(c, a, ctx); }
-function personDialog(c, a, ctx){
+// The list on screen can be minutes old: the person may have added their email or fixed their name from a QR since.
+// So a profile always opens with the person as they are in the database now, and saving never puts old values back.
+async function personDialog(c, a, ctx){
+  if (a?.id) { const { data } = await SB.from("attendees").select("*").eq("id", a.id).maybeSingle(); if (data) Object.assign(a, data); }
+  return drawPerson(c, a, ctx);
+}
+function drawPerson(c, a, ctx){
   const rf = formOf(c.conf);
   const checks = a ? (c.checkinsByCode.get(a.code) || []).map(k => ({k, s: c.sessionById.get(k.session_id)})).filter(x => x.s).sort((x, y) => x.k.at.localeCompare(y.k.at)) : [];
   const vouchers = a ? c.vouchers.map(v => ({v, use: (c.usesByVoucher.get(v.id) || []).find(u => u.attendee_id === a.id)})) : [];
